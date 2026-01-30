@@ -1,9 +1,18 @@
 import * as Sentry from "@sentry/nextjs";
 import { CoachingFeedback, DEFAULT_COACHING_FEEDBACK, calculateSkillLevel } from "./coaching";
 
+/**
+ * MiniMax model usage (platform.minimax.io docs):
+ * - Text Chat (/v1/text/chatcompletion_v2): M2-her only (dialogue, role-play). Used for Shifu interviewer.
+ * - Anthropic-compatible (/anthropic/v1/messages): MiniMax-M2.1, MiniMax-M2.1-lightning, MiniMax-M2 (code, reasoning). Used for report generation and analysis on api.minimax.io.
+ * - api.minimax.chat: same chatcompletion_v2 endpoint can use MiniMax-M2.1-lightning for both chat and report.
+ */
 // Support both api.minimax.io (official) and api.minimax.chat; keys from platform.minimax.io use .io
 const MINIMAX_API_BASE = (process.env.MINIMAX_API_BASE_URL || "https://api.minimax.io").replace(/\/$/, "");
 const MINIMAX_API_URL = `${MINIMAX_API_BASE}/v1/text/chatcompletion_v2`;
+const MINIMAX_ANTHROPIC_URL = MINIMAX_API_BASE.includes("api.minimax.io")
+  ? `${MINIMAX_API_BASE}/anthropic/v1/messages`
+  : null;
 // TTS on .io uses t2a_v2; .chat uses text_to_speech. Override with MINIMAX_TTS_BASE_URL if needed.
 const MINIMAX_TTS_BASE = (process.env.MINIMAX_TTS_BASE_URL || MINIMAX_API_BASE).replace(/\/$/, "");
 const MINIMAX_TTS_URL = MINIMAX_TTS_BASE.includes("api.minimax.io")
@@ -118,7 +127,7 @@ export async function callMiniMax(messages: MiniMaxMessage[], temperature = 0.7,
   return data.reply || "";
 }
 
-export async function textToSpeech(text: string, voiceId = "male-qn-qingse"): Promise<ArrayBuffer> {
+export async function textToSpeech(text: string, voiceId = "English_Gentle-voiced_man"): Promise<ArrayBuffer> {
   if (!MINIMAX_API_KEY) {
     throw new Error("MINIMAX_API_KEY is not set");
   }
@@ -196,7 +205,7 @@ const MINIMAX_TTS_WS_URL = MINIMAX_TTS_BASE.includes("api.minimax.io")
 /** Yields audio chunks (Uint8Array) from MiniMax WebSocket TTS. Only works when using api.minimax.io. */
 export async function* textToSpeechStream(
   text: string,
-  voiceId = "male-qn-qingse"
+  voiceId = "English_Gentle-voiced_man"
 ): AsyncGenerator<Uint8Array, void, unknown> {
   if (!MINIMAX_API_KEY) throw new Error("MINIMAX_API_KEY is not set");
   if (!MINIMAX_TTS_WS_URL) throw new Error("Streaming TTS is only supported with api.minimax.io");
@@ -254,7 +263,8 @@ export async function* textToSpeechStream(
       if (obj.event === "task_started") taskStarted = true;
       if (obj.event === "task_failed" || (obj.base_resp && obj.base_resp.status_code !== 0)) {
         ws.close();
-        throw new Error("MiniMax TTS WebSocket task failed");
+        console.error("MiniMax TTS WebSocket task failed", JSON.stringify(obj, null, 2));
+        throw new Error(`MiniMax TTS WebSocket task failed: ${JSON.stringify(obj)}`);
       }
       if (obj.event === "task_finished") {
         ws.close();
@@ -301,6 +311,63 @@ function parseJSON<T>(text: string, defaultValue: T): { success: boolean; data: 
     }
   }
   return { success: false, data: defaultValue, rawText: text };
+}
+
+// ============================================================================
+// Anthropic-compatible API (report generation on api.minimax.io)
+// ============================================================================
+
+interface AnthropicMessage {
+  role: "user" | "assistant" | "system";
+  content: string | { type: string; text: string }[];
+}
+
+/** Call MiniMax M2.1 via Anthropic-compatible endpoint. Used for report generation on api.minimax.io. */
+async function callMiniMaxAnthropic(
+  system: string,
+  userMessage: string,
+  model: string = "MiniMax-M2.1",
+  maxTokens: number = 2048
+): Promise<string> {
+  if (!MINIMAX_API_KEY) throw new Error("MINIMAX_API_KEY is not set.");
+  if (!MINIMAX_ANTHROPIC_URL) throw new Error("Anthropic endpoint is only available for api.minimax.io");
+
+  const body = {
+    model,
+    max_tokens: maxTokens,
+    system: sanitizeForPrompt(system).slice(0, 10000) || "You are a helpful assistant.",
+    messages: [
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: userMessage }],
+      },
+    ],
+  };
+
+  const response = await fetch(MINIMAX_ANTHROPIC_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MINIMAX_API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`MiniMax Anthropic API Error (${response.status}): ${err}`);
+  }
+
+  const data = (await response.json()) as {
+    content?: { type: string; text?: string }[];
+    stop_reason?: string;
+  };
+  const content = data.content;
+  if (Array.isArray(content) && content.length > 0) {
+    const textBlock = content.find((c) => c.type === "text" && c.text);
+    if (textBlock && "text" in textBlock) return textBlock.text as string;
+  }
+  return "";
 }
 
 // ============================================================================
