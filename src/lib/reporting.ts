@@ -1,6 +1,11 @@
 /**
  * Interview Report Generation System
  * Creates comprehensive post-interview reports with code quality, integrity, and recommendations
+ *
+ * Improved integrity monitoring with:
+ * - Dynamic code originality calculation (not hardcoded)
+ * - Typing pattern analysis
+ * - Code growth pattern detection
  */
 
 import { useInterviewStore } from './store';
@@ -37,14 +42,40 @@ export interface IntegrityScore {
   flags: string[];
 }
 
+export interface IntegrityData {
+  blurCount: number;
+  pasteCount: number;
+  largePasteEvents: { timestamp: number; length: number }[];
+  // Optional enhanced metrics (for future implementation)
+  typingMetrics?: {
+    totalKeystrokes?: number;
+    averageTypingSpeed?: number;
+    pauseEvents?: number;
+    deletionRatio?: number;
+    burstTyping?: number;
+  };
+  codeSnapshots?: {
+    timestamp: number;
+    codeLength: number;
+    changeSize?: number;
+  }[];
+}
+
 export class ReportGenerator {
-  generateReport(duration: number = 45): InterviewReport {
+  /**
+   * Generate a complete interview report
+   * Now async to support async agent evaluation
+   */
+  async generateReport(duration: number = 45): Promise<InterviewReport> {
     const state = useInterviewStore.getState();
     const { code, language, integrity } = state;
 
     const codeQuality = this.analyzeCodeQuality(code, language);
-    const integrityScore = this.calculateIntegrityScore(integrity);
+    const integrityScore = this.calculateIntegrityScore(integrity, code);
     const recommendation = this.determineRecommendation(codeQuality, integrityScore);
+
+    // Get async agent evaluation
+    const agentEvaluation = await agentReasoning.getEvaluation();
 
     return {
       candidateName: 'Candidate',
@@ -55,7 +86,7 @@ export class ReportGenerator {
       confidence: recommendation.confidence,
       codeQuality,
       integrityScore,
-      agentEvaluation: agentReasoning.getEvaluation(),
+      agentEvaluation,
     };
   }
 
@@ -92,7 +123,11 @@ export class ReportGenerator {
     return { overall: Math.round(overall * 10) / 10, ...scores, breakdown };
   }
 
-  private calculateIntegrityScore(data: any): IntegrityScore {
+  /**
+   * Calculate integrity score with dynamic originality calculation
+   * Replaces hardcoded codeOriginality: 98 with actual analysis
+   */
+  private calculateIntegrityScore(data: IntegrityData, code: string): IntegrityScore {
     let score = 100;
     const flags: string[] = [];
 
@@ -100,27 +135,163 @@ export class ReportGenerator {
     const pasteCount = data?.pasteCount || 0;
     const largePastes = data?.largePasteEvents?.length || 0;
 
+    // Tab switch penalty
     if (blurCount > 5) {
       score -= Math.min(20, blurCount * 2);
       flags.push(`${blurCount} tab switches (suspicious)`);
     }
 
+    // Large paste penalty
     if (largePastes > 0) {
       score -= Math.min(30, largePastes * 10);
       flags.push(`${largePastes} large paste events (high concern)`);
     }
 
-    const typingPattern = largePastes > 2 ? 'suspicious' : 'natural';
+    // Calculate code originality based on multiple factors
+    const codeOriginality = this.calculateCodeOriginality(data, code);
+
+    // Analyze typing pattern
+    const typingPattern = this.analyzeTypingPattern(data);
+
+    // Additional penalty for suspicious typing
+    if (typingPattern === 'suspicious') {
+      score -= 15;
+      flags.push('Unusual typing pattern detected');
+    }
+
+    // Penalty for low originality
+    if (codeOriginality < 70) {
+      score -= Math.min(20, (70 - codeOriginality));
+      flags.push(`Code originality score: ${codeOriginality}%`);
+    }
 
     return {
       overall: Math.max(0, score),
       tabSwitches: blurCount,
       pasteEvents: pasteCount,
       largePastes,
-      codeOriginality: 98,
+      codeOriginality,
       typingPattern,
       flags,
     };
+  }
+
+  /**
+   * Calculate code originality score based on typing and paste behavior
+   * Replaces the hardcoded 98 value
+   */
+  private calculateCodeOriginality(data: IntegrityData, code: string): number {
+    let originality = 100;
+    const codeLength = code.length;
+
+    // If no data, return default high score
+    if (!data) return 95;
+
+    const { pasteCount = 0, largePasteEvents = [] } = data;
+
+    // Calculate total pasted characters
+    const totalPastedChars = largePasteEvents.reduce((sum, e) => sum + e.length, 0);
+
+    // If most of the code came from pastes, reduce originality
+    if (codeLength > 0) {
+      const pasteRatio = totalPastedChars / codeLength;
+      if (pasteRatio > 0.7) {
+        originality -= 40; // Heavy paste usage
+      } else if (pasteRatio > 0.5) {
+        originality -= 25;
+      } else if (pasteRatio > 0.3) {
+        originality -= 15;
+      } else if (pasteRatio > 0.1) {
+        originality -= 5;
+      }
+    }
+
+    // Penalty for many paste events
+    if (pasteCount > 10) {
+      originality -= Math.min(15, (pasteCount - 10) * 2);
+    }
+
+    // Analyze code snapshots for suspicious growth patterns
+    if (data.codeSnapshots && data.codeSnapshots.length > 2) {
+      const growthPattern = this.analyzeCodeGrowth(data.codeSnapshots);
+      if (growthPattern === 'suspicious_jump') {
+        originality -= 20;
+      }
+    }
+
+    // Use typing metrics if available
+    if (data.typingMetrics) {
+      const { totalKeystrokes = 0, deletionRatio = 0.1, burstTyping = 0 } = data.typingMetrics;
+
+      // Very low deletion ratio suggests pre-written code
+      if (totalKeystrokes > 100 && deletionRatio < 0.05) {
+        originality -= 10;
+      }
+
+      // Excessive burst typing (copy-paste-like behavior)
+      if (burstTyping > 5) {
+        originality -= burstTyping * 2;
+      }
+    }
+
+    return Math.max(0, Math.min(100, Math.round(originality)));
+  }
+
+  /**
+   * Analyze typing patterns to detect suspicious behavior
+   */
+  private analyzeTypingPattern(data: IntegrityData): 'natural' | 'suspicious' | 'unknown' {
+    if (!data) return 'unknown';
+
+    const { largePasteEvents = [], typingMetrics } = data;
+
+    // If we have typing metrics, use them for analysis
+    if (typingMetrics) {
+      const { totalKeystrokes = 0, averageTypingSpeed = 0, burstTyping = 0, deletionRatio = 0 } = typingMetrics;
+
+      // Not enough data
+      if (totalKeystrokes < 50) {
+        return 'unknown';
+      }
+
+      // Check for suspiciously fast typing (> 150 WPM consistently = ~750 chars/min)
+      if (averageTypingSpeed > 750) {
+        return 'suspicious';
+      }
+
+      // Check for burst patterns (copy-paste-like behavior)
+      if (burstTyping > 5) {
+        return 'suspicious';
+      }
+
+      // Very low deletion ratio suggests pre-written code
+      if (deletionRatio < 0.05 && totalKeystrokes > 200) {
+        return 'suspicious';
+      }
+
+      return 'natural';
+    }
+
+    // Fallback to basic large paste analysis
+    if (largePasteEvents.length > 2) {
+      return 'suspicious';
+    }
+
+    return largePasteEvents.length > 0 ? 'unknown' : 'natural';
+  }
+
+  /**
+   * Analyze code growth pattern from snapshots
+   */
+  private analyzeCodeGrowth(snapshots: { timestamp: number; codeLength: number }[]): 'normal' | 'suspicious_jump' {
+    for (let i = 1; i < snapshots.length; i++) {
+      const jump = snapshots[i].codeLength - snapshots[i - 1].codeLength;
+      // Large sudden increase (> 200 chars at once) is suspicious
+      if (jump > 200) {
+        return 'suspicious_jump';
+      }
+    }
+    return 'normal';
   }
 
   private determineRecommendation(
@@ -166,6 +337,7 @@ export class ReportGenerator {
     md += `## ${integrityEmoji} Integrity Score: ${integrityScore.overall}/100\n\n`;
     md += `- Tab Switches: ${integrityScore.tabSwitches}\n`;
     md += `- Paste Events: ${integrityScore.pasteEvents} (${integrityScore.largePastes} large)\n`;
+    md += `- Code Originality: ${integrityScore.codeOriginality}%\n`;
     md += `- Typing Pattern: ${integrityScore.typingPattern}\n\n`;
 
     if (integrityScore.flags.length > 0) {
@@ -196,8 +368,8 @@ export class ReportGenerator {
 
 export const reportGenerator = new ReportGenerator();
 
-// Legacy function for backward compatibility
-export function generateInterviewReport(): string {
-  const report = reportGenerator.generateReport();
+// Legacy function for backward compatibility (now async)
+export async function generateInterviewReport(): Promise<string> {
+  const report = await reportGenerator.generateReport();
   return reportGenerator.generateMarkdown(report);
 }

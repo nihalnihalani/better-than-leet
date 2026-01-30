@@ -1,19 +1,22 @@
-import { NextResponse } from 'next/server';
-import { analyzeCodeWithGemini } from '@/lib/gemini';
+import { analyzeCodeWithMiniMax } from '@/lib/minimax';
+import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
+import { AnalysisReviewRequestSchema, validateRequest } from '@/lib/schemas';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code, language } = body;
 
-    if (!code) {
-      return NextResponse.json({ error: 'Code is required' }, { status: 400 });
+    // Validate request using Zod schema
+    const validation = validateRequest(AnalysisReviewRequestSchema, body);
+    if (!validation.success) {
+      return errorResponse(validation.error || 'Invalid request', 400, 'VALIDATION_ERROR');
     }
 
-    const analysis = await analyzeCodeWithGemini(code, language || 'python');
-    return NextResponse.json(analysis);
+    const { code, language } = validation.data!;
+
+    const analysis = await analyzeCodeWithMiniMax(code, language || 'python');
+    return successResponse(analysis);
   } catch (error) {
-    console.error('Analysis Error:', error);
-    return NextResponse.json({ error: 'Failed to analyze code' }, { status: 500 });
+    return handleApiError(error, 'Analysis Error');
   }
 }

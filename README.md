@@ -33,6 +33,18 @@ Instead of just checking if the code passes tests, this system observes *how* th
 - **🛠️ Autonomous Auto-Fix**: The agent can detect syntax/runtime errors and, upon request, autonomously patch the code and install missing dependencies (e.g., `pip install numpy`).
 - **🛡️ Real-time Monitoring**: Sentry integration tracks exceptions and performance bottlenecks during the interview process.
 
+## 📸 Screenshots
+
+Please add screenshots to the `public/screenshots` folder.
+
+| Interview Interface | Code Analysis |
+|:---:|:---:|
+| ![Interview Interface](public/screenshots/interface.png) | ![Code Analysis](public/screenshots/analysis.png) |
+
+| Voice Agent | Final Report |
+|:---:|:---:|
+| ![Voice Agent](public/screenshots/agent.png) | ![Report](public/screenshots/report.png) |
+
 ## 🏗️ Architecture
 
 The system follows a reactive event-loop architecture where the candidate's code changes trigger analysis events, which in turn drive the Voice Agent's behavior.
@@ -78,6 +90,7 @@ A detailed overview of the codebase organization:
 /
 ├── public/                  # Static assets
 │   └── icons/               # Official technology logos
+│   └── screenshots/         # Application screenshots
 ├── src/
 │   ├── app/                 # Next.js App Router
 │   │   ├── api/             # Backend API Routes

@@ -1,19 +1,43 @@
-import { NextResponse } from 'next/server';
-import { daytonaService } from '@/lib/daytona';
+import { daytonaService, CreateWorkspaceOptions } from '@/lib/daytona';
+import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
+import { DEFAULT_AUTO_STOP_INTERVAL } from '@/lib/constants';
+import { CreateWorkspaceRequestSchema, validateRequest } from '@/lib/schemas';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { language } = body;
 
-    if (!language) {
-      return NextResponse.json({ error: 'Language is required' }, { status: 400 });
+    // Validate request using Zod schema
+    const validation = validateRequest(CreateWorkspaceRequestSchema, body);
+    if (!validation.success) {
+      return errorResponse(validation.error || 'Invalid request', 400, 'VALIDATION_ERROR');
     }
 
-    const workspace = await daytonaService.createWorkspace(language);
-    return NextResponse.json(workspace);
+    const {
+      language,
+      networkAllowList,
+      autoStopInterval,
+      autoArchiveInterval,
+      labels,
+      envVars,
+      installCodeRabbit,
+      timeout,
+    } = validation.data!;
+
+    const options: CreateWorkspaceOptions = {
+      language,
+      networkAllowList,
+      autoStopInterval: autoStopInterval ?? DEFAULT_AUTO_STOP_INTERVAL,
+      autoArchiveInterval,
+      labels,
+      envVars,
+      installCodeRabbit: installCodeRabbit !== false, // Default to true
+      timeout,
+    };
+
+    const workspace = await daytonaService.createWorkspace(options);
+    return successResponse(workspace);
   } catch (error) {
-    console.error('API Create Workspace Error:', error);
-    return NextResponse.json({ error: 'Failed to create workspace' }, { status: 500 });
+    return handleApiError(error, 'API Create Workspace Error');
   }
 }

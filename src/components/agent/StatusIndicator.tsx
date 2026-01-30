@@ -21,9 +21,10 @@ export function StatusIndicator({ status }: { status: ConnectionStatus | string 
   const label = labels[status] || status;
 
   return (
-    <div className="flex items-center gap-2">
-      <div className={cn("w-3 h-3 rounded-full animate-pulse", color)} />
-      <span className="text-sm font-medium text-gray-300">
+    <div className="flex items-center gap-2" aria-label={`Connection status: ${label}`}>
+      <div className={cn("w-3 h-3 rounded-full animate-pulse", color)} aria-hidden="true" />
+      <span className="sr-only">Status: {label}</span>
+      <span className="text-sm font-medium text-gray-300" aria-hidden="true">
         {label}
       </span>
     </div>

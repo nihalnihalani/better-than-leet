@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Dialog,
   DialogContent,
@@ -6,123 +8,331 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Shield, AlertTriangle, CheckCircle, XCircle, Code, Brain } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, XCircle, Code, Brain, Loader2, FileDown } from "lucide-react";
 import { useInterviewStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 interface InterviewReportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+function calculateIntegrityScore(integrity: {
+  blurCount: number;
+  pasteCount: number;
+  largePasteEvents: { timestamp: number; length: number }[];
+}): number {
+  // Diminishing penalty for blur events (first few are more suspicious)
+  // Max penalty: 25 points
+  const blurPenalty = Math.min(25, integrity.blurCount * 3 + Math.floor(integrity.blurCount / 3) * 2);
+
+  // Small pastes have minor penalty, large pastes are weighted heavily
+  // Max penalty: 40 points for regular pastes, plus additional for large pastes
+  const smallPastePenalty = Math.min(20, (integrity.pasteCount - integrity.largePasteEvents.length) * 3);
+  const largePastePenalty = Math.min(35, integrity.largePasteEvents.length * 15);
+
+  // Calculate final score
+  const totalPenalty = blurPenalty + smallPastePenalty + largePastePenalty;
+  return Math.max(0, 100 - totalPenalty);
+}
+
 export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDialogProps) {
-  const { integrity, latestReview, coderabbitReview } = useInterviewStore();
+  const {
+    integrity,
+    latestReview,
+    coderabbitReview,
+    code,
+    transcript,
+    testResults,
+    currentProblemId
+  } = useInterviewStore();
 
-  const integrityScore = Math.max(0, 100 - (integrity.blurCount * 5) - (integrity.pasteCount * 10));
-  const isIntegrityGood = integrityScore > 80;
+  const [aiReport, setAiReport] = useState<any>(null); // StructuredReport
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Simple heuristic for demo purposes
-  const codeQualityScore = latestReview ? latestReview.score : 0;
-  const hireRecommendation = (integrityScore > 70 && codeQualityScore > 7) ? "HIRE" : "NO HIRE";
+  const integrityScore = calculateIntegrityScore(integrity);
+  const isIntegrityGood = integrityScore > 70;
+
+  // Generate AI report when dialog opens
+  useEffect(() => {
+    if (open && !aiReport && !isGenerating) {
+      generateReport();
+    }
+  }, [open]);
+
+  const generateReport = async () => {
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/interview/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript,
+          code,
+          language: 'python',
+          testResults,
+          integrity,
+          problemId: currentProblemId || 'Coding Challenge'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.friendlyMessage?.message || data.error || 'Failed to generate report');
+      }
+
+      setAiReport(data.data.report);
+
+      // Cleanup workspace after successful report generation
+      const workspaceId = useInterviewStore.getState().workspaceId;
+      if (workspaceId) {
+        try {
+          console.log('🗑️ Cleaning up workspace after report generation...');
+          await fetch('/api/sandbox/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspaceId })
+          });
+          console.log('✅ Workspace cleanup complete');
+        } catch (deleteErr) {
+          // Don't fail the report if cleanup fails - just log it
+          console.warn('Failed to cleanup workspace (non-fatal):', deleteErr);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to generate AI report:', err);
+      setError(err instanceof Error ? err.message : 'Failed to generate report');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 8) return "text-green-500";
+    if (score >= 5) return "text-yellow-500";
+    return "text-red-500";
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-[#0c0c0c] border border-gray-800">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-            Interview Final Report
-            <span className={`px-3 py-1 rounded-full text-xs text-white ${hireRecommendation === "HIRE" ? "bg-green-600" : "bg-red-600"}`}>
-              {hireRecommendation}
+          <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+            <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              Interview Final Report
             </span>
+            {aiReport && aiReport.hireRecommendation && (
+              <span className={`px-4 py-1.5 rounded-full text-sm font-bold shadow-lg ${(aiReport.hireRecommendation || "").includes("HIRE") && !(aiReport.hireRecommendation || "").includes("NO")
+                ? "bg-green-500/20 text-green-400 border border-green-500/50"
+                : "bg-red-500/20 text-red-400 border border-red-500/50"
+                }`}>
+                {(aiReport.hireRecommendation || "PENDING").replace("_", " ")}
+              </span>
+            )}
           </DialogTitle>
-          <DialogDescription>
-            Comprehensive analysis of the candidate's performance and integrity.
+          <DialogDescription className="text-gray-400">
+            AI-powered comprehensive evaluation of candidate performance.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-          {/* Integrity Section */}
-          <Card className={`border-l-4 ${isIntegrityGood ? "border-l-green-500" : "border-l-red-500"}`}>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Shield className="w-5 h-5" /> Integrity Check
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold mb-2">{integrityScore}%</div>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="flex justify-between">
-                  <span>Tab Focus Lost:</span>
-                  <span className={integrity.blurCount > 0 ? "text-red-500 font-bold" : "text-green-500"}>
-                    {integrity.blurCount} times
-                  </span>
+        {isGenerating ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-6">
+            <div className="relative">
+              <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse"></div>
+              <Loader2 className="w-16 h-16 animate-spin text-blue-400 relative z-10" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-lg font-medium text-gray-200">Generating Analysis...</p>
+              <p className="text-sm text-gray-500">Processing transcript, code quality, and behavioral signals.</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center space-y-4">
+            <div className="inline-flex p-4 rounded-full bg-red-500/10 mb-2">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-red-400">Generation Failed</h3>
+            <p className="text-gray-400 max-w-md mx-auto">{error}</p>
+            <Button onClick={generateReport} variant="outline" className="mt-4">
+              Try Again
+            </Button>
+          </div>
+        ) : aiReport ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+
+            {/* Executive Summary - Full Width */}
+            <Card className="lg:col-span-2 border-l-4 border-l-blue-500 bg-[#151515]">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-blue-400">
+                  <Brain className="w-5 h-5" /> Executive Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-gray-300 leading-relaxed">
+                {aiReport.executiveSummary}
+              </CardContent>
+            </Card>
+
+            {/* Technical Evaluation */}
+            <Card className="border-l-4 border-l-purple-500 bg-[#151515]">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-purple-400">
+                  <Code className="w-5 h-5" /> Technical Skills
+                </CardTitle>
+                <span className={`text-xl font-bold ${getScoreColor(aiReport.technicalEvaluation.score)}`}>
+                  {aiReport.technicalEvaluation.score}/10
+                </span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-gray-400">{aiReport.technicalEvaluation.summary}</p>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">Strengths</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {aiReport.technicalEvaluation.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                  </ul>
                 </div>
-                <div className="flex justify-between">
-                  <span>Suspicious Pastes:</span>
-                  <span className={integrity.pasteCount > 0 ? "text-red-500 font-bold" : "text-green-500"}>
-                    {integrity.pasteCount} detected
-                  </span>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">Weaknesses</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {aiReport.technicalEvaluation.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                  </ul>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          {/* AI Analysis Score */}
-          <Card className="border-l-4 border-l-blue-500">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Brain className="w-5 h-5" /> AI Evaluation
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold mb-2">{latestReview ? `${latestReview.score}/10` : "N/A"}</div>
-              <p className="text-sm text-muted-foreground">
-                {latestReview ? latestReview.complexity : "No analysis run yet."}
-              </p>
-            </CardContent>
-          </Card>
+            {/* Communication Evaluation */}
+            <Card className="border-l-4 border-l-yellow-500 bg-[#151515]">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-yellow-400">
+                  <span className="text-xl">💬</span> Communication
+                </CardTitle>
+                <span className={`text-xl font-bold ${getScoreColor(aiReport.communicationEvaluation.score)}`}>
+                  {aiReport.communicationEvaluation.score}/10
+                </span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-gray-400">{aiReport.communicationEvaluation.summary}</p>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">Strengths</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {aiReport.communicationEvaluation.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">Areas to Improve</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {aiReport.communicationEvaluation.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* Issues Found */}
-          <Card className="col-span-1 md:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Code className="w-5 h-5" /> Key Findings
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {latestReview?.issues && latestReview.issues.length > 0 ? (
-                <ul className="space-y-2">
-                  {latestReview.issues.map((issue, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                      <span>{issue}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-muted-foreground text-sm">No critical issues flagged.</p>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* CodeRabbit Summary */}
-           {coderabbitReview && (
-             <Card className="col-span-1 md:col-span-2 border-l-4 border-l-orange-500">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                        CodeRabbit Summary
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {coderabbitReview.summary}
-                </CardContent>
-             </Card>
-           )}
-        </div>
+            {/* Problem Solving Evaluation */}
+            <Card className="border-l-4 border-l-cyan-500 bg-[#151515]">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-cyan-400">
+                  <span className="text-xl">🧩</span> Problem Solving
+                </CardTitle>
+                <span className={`text-xl font-bold ${getScoreColor(aiReport.problemSolvingEvaluation.score)}`}>
+                  {aiReport.problemSolvingEvaluation.score}/10
+                </span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-gray-400">{aiReport.problemSolvingEvaluation.summary}</p>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">Strengths</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {aiReport.problemSolvingEvaluation.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">Areas to Improve</h4>
+                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                    {aiReport.problemSolvingEvaluation.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
 
-        <div className="flex justify-end gap-2 mt-6">
+            {/* Integrity & Metrics */}
+            <Card className={`border-l-4 ${isIntegrityGood ? "border-l-green-500" : "border-l-red-500"} bg-[#151515]`}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-gray-200">
+                  <Shield className={`w-5 h-5 ${isIntegrityGood ? "text-green-500" : "text-red-500"}`} />
+                  Integrity & Metrics
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center p-3 rounded-lg bg-black/40">
+                    <div className={`text-2xl font-bold ${isIntegrityGood ? "text-green-400" : "text-red-400"}`}>
+                      {integrityScore}%
+                    </div>
+                    <div className="text-xs text-gray-500 uppercase mt-1">Trust Score</div>
+                  </div>
+                  <div className="text-center p-3 rounded-lg bg-black/40">
+                    <div className="text-2xl font-bold text-blue-400">
+                      {testResults.length > 0
+                        ? `${testResults[testResults.length - 1].testsPassed}/${testResults[testResults.length - 1].testsTotal}`
+                        : "-"}
+                    </div>
+                    <div className="text-xs text-gray-500 uppercase mt-1">Tests Passed</div>
+                  </div>
+                </div>
+
+                {/* Detailed Integrity Breakdown */}
+                <div className="space-y-2 pt-2 border-t border-gray-800">
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Integrity Details</h4>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Tab Switches:</span>
+                      <span className={`font-mono ${integrity.blurCount > 5 ? "text-red-400" : integrity.blurCount > 2 ? "text-yellow-400" : "text-green-400"}`}>
+                        {integrity.blurCount} {integrity.blurCount > 5 ? "🔴" : integrity.blurCount > 2 ? "🟡" : "🟢"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Paste Events:</span>
+                      <span className={`font-mono ${integrity.pasteCount > 3 ? "text-yellow-400" : "text-green-400"}`}>
+                        {integrity.pasteCount} {integrity.pasteCount > 3 ? "🟡" : "🟢"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400">Large Pastes (&gt;100 chars):</span>
+                      <span className={`font-mono ${integrity.largePasteEvents.length > 0 ? "text-red-400" : "text-green-400"}`}>
+                        {integrity.largePasteEvents.length} {integrity.largePasteEvents.length > 0 ? "🔴" : "🟢"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Final Verdict & Feedback */}
+            <Card className="lg:col-span-2 border-t-4 border-t-pink-500 bg-gradient-to-b from-[#1a1015] to-[#151515]">
+              <CardHeader>
+                <CardTitle className="text-pink-400 flex items-center gap-2">
+                  🎯 Final Feedback
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-gray-300 italic">
+                "{aiReport.finalFeedback}"
+              </CardContent>
+            </Card>
+
+          </div>
+        ) : null}
+
+        <div className="flex justify-end gap-2 mt-6 border-t border-gray-800 pt-6">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button onClick={() => window.print()}>Print Report</Button>
+          <Button onClick={() => window.print()}>
+            <FileDown className="w-4 h-4 mr-2" />
+            Download PDF
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

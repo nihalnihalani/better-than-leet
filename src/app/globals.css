@@ -20,7 +20,7 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  
+
   --radius: var(--radius);
 }
 
@@ -75,6 +75,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -101,20 +102,19 @@
     background-size: 200% auto;
     animation: gradientFlow 5s linear infinite;
   }
-  
+
   .animate-shimmer {
-    background: linear-gradient(
-      to right,
-      #4ade80 20%,
-      #60a5fa 40%,
-      #4ade80 60%,
-      #60a5fa 80%
-    );
+    background: linear-gradient(to right,
+        #4ade80 20%,
+        #60a5fa 40%,
+        #4ade80 60%,
+        #60a5fa 80%);
     background-size: 200% auto;
     background-clip: text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    color: transparent; /* Fallback/Required for some browsers */
+    color: transparent;
+    /* Fallback/Required for some browsers */
     animation: shimmer 8s linear infinite;
   }
 
@@ -136,6 +136,7 @@
       opacity: 0;
       transform: translateY(20px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -146,6 +147,7 @@
     0% {
       background-position: 0% 50%;
     }
+
     100% {
       background-position: 200% 50%;
     }
@@ -159,6 +161,7 @@
     from {
       transform: rotate(0deg);
     }
+
     to {
       transform: rotate(360deg);
     }
@@ -169,12 +172,34 @@
   }
 
   @keyframes gradient-x {
-    0%, 100% {
+
+    0%,
+    100% {
       background-position: 0% 50%;
     }
+
     50% {
       background-position: 100% 50%;
     }
   }
-}
 
+  .animate-color-wave {
+    background: linear-gradient(to right,
+        #3b82f6 20%,
+        #22c55e 40%,
+        #06b6d4 60%,
+        #3b82f6 80%);
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: wave 4s linear infinite;
+  }
+
+  @keyframes wave {
+    to {
+      background-position: 200% center;
+    }
+  }
+}

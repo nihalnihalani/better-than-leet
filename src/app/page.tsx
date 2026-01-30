@@ -1,89 +1,108 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Logo } from "@/components/ui/Logo";
-import { Mic, BrainCircuit, Terminal, ArrowRight } from "lucide-react";
-import { MetricsDashboard } from "@/components/interview/MetricsDashboard";
+import { Mic, Sparkles, Lock, GraduationCap } from "lucide-react";
+import { StartInterviewButton } from "@/components/interview/StartInterviewButton";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="border-b">
+    <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-purple-100">
+      {/* Background Gradients */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-0 md:-top-[20%] left-[20%] w-[500px] h-[500px] bg-purple-100 rounded-full blur-[120px] opacity-60" />
+        <div className="absolute bottom-0 md:-bottom-[20%] right-[20%] w-[500px] h-[500px] bg-blue-100 rounded-full blur-[120px] opacity-60" />
+      </div>
+
+      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="font-bold text-xl flex items-center gap-2">
             <Logo size={32} />
             Daytona Interview Sandbox
           </div>
-          <div className="flex gap-4">
-            <Link href="/test">
-              <Button variant="ghost">Smoke Test</Button>
-            </Link>
-            <Link href="/interview">
-              <Button>Start Interview</Button>
-            </Link>
-          </div>
+          <StartInterviewButton size="default" showIcon={false} />
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-16 flex flex-col items-center text-center space-y-8">
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight max-w-4xl flex flex-col items-center gap-2 pb-2">
-          <span className="animate-slide-up-fade">The Next Generation of</span>
-          <span className="animate-slide-up-fade delay-200">
-            <span className="animate-shimmer">
-              Technical Interviews
+      <main className="flex-1 container mx-auto px-4 py-20 flex flex-col items-center text-center space-y-12 relative z-10">
+
+        {/* Hero Section */}
+        <div className="space-y-6 flex flex-col items-center max-w-4xl mx-auto">
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight flex flex-col items-center gap-2 pb-2">
+            <span className="animate-slide-up-fade">Meet <span className="animate-color-wave font-extrabold tracking-tight">Shifu</span></span>
+            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground font-normal">
+              Your AI Technical Interviewer
             </span>
-          </span>
-        </h1>
+          </h1>
 
-        <p className="text-xl text-muted-foreground max-w-2xl animate-slide-up-fade" style={{ animationDelay: '400ms' }}>
-          Experience a voice-first coding interview with "Alex", an AI agent powered by Gemini 3 Pro and ElevenLabs, running in a secure Daytona sandbox.
-        </p>
+          <p className="text-xl text-muted-foreground max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
+            Experience the future of technical hiring with a voice-first AI agent powered by MiniMax M2.1.
+            Real-time coding, deep analysis, and instant feedback in a secure Daytona sandbox.
+          </p>
 
-        <div className="flex gap-4 animate-slide-up-fade" style={{ animationDelay: '600ms' }}>
-          <Link href="/interview">
-            <Button size="lg" className="h-12 px-8 text-lg">
-              Start Interview <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
-          </Link>
-          <Link href="https://github.com/daytonaio/sdk" target="_blank">
-            <Button variant="outline" size="lg" className="h-12 px-8 text-lg">
-              View on GitHub
-            </Button>
-          </Link>
+          <div className="flex flex-wrap justify-center gap-4 animate-slide-up-fade" style={{ animationDelay: '600ms' }}>
+            <StartInterviewButton size="lg" className="h-14 px-8 text-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 rounded-full" />
+            <Link href="/practice">
+              <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
+                <GraduationCap className="mr-2 w-5 h-5" />
+                Practice Mode
+              </Button>
+            </Link>
+            <Link href="https://github.com/daytonaio/sdk" target="_blank">
+              <Button variant="ghost" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
+                View on GitHub
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl mt-16 text-left">
-          <Card>
+        {/* Feature Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-6xl mt-20 text-left">
+          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60">
             <CardHeader>
-              <Mic className="w-10 h-10 mb-2 text-blue-500" />
-              <CardTitle>Voice-First AI</CardTitle>
-              <CardDescription>Conversational agent "Alex" guides you through problems naturally.</CardDescription>
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Mic className="w-6 h-6 text-blue-500" />
+              </div>
+              <CardTitle className="text-xl">Voice-First AI</CardTitle>
+              <CardDescription className="text-base">
+                Converse naturally with Shifu using MiniMax Live's native voice synthesis. No typing required.
+              </CardDescription>
             </CardHeader>
           </Card>
-          <Card>
+
+          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60">
             <CardHeader>
-              <Terminal className="w-10 h-10 mb-2 text-green-500" />
-              <CardTitle>Secure Sandbox</CardTitle>
-              <CardDescription>Real code execution in isolated Daytona containers.</CardDescription>
+              <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Lock className="w-6 h-6 text-green-500" />
+              </div>
+              <CardTitle className="text-xl">Secure Sandbox</CardTitle>
+              <CardDescription className="text-base">
+                Execute code safely in isolated Daytona containers. Full terminal access with zero risk.
+              </CardDescription>
             </CardHeader>
           </Card>
-          <Card>
+
+          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60">
             <CardHeader>
-              <BrainCircuit className="w-10 h-10 mb-2 text-purple-500" />
-              <CardTitle>Deep Analysis</CardTitle>
-              <CardDescription>Gemini 3 Pro reviews code for complexity, bugs, and security.</CardDescription>
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Sparkles className="w-6 h-6 text-purple-500" />
+              </div>
+              <CardTitle className="text-xl">MiniMax M2.1 Analysis</CardTitle>
+              <CardDescription className="text-base">
+                Receive comprehensive feedback on code quality, complexity, and security instantly.
+              </CardDescription>
             </CardHeader>
           </Card>
         </div>
 
-        {/* Metrics Dashboard Section */}
-        <div className="w-full max-w-6xl mt-20 animate-slide-up-fade" style={{ animationDelay: '800ms' }}>
-          <MetricsDashboard />
-        </div>
       </main>
 
-      <footer className="border-t py-8 text-center text-sm text-muted-foreground">
-        Built with Next.js, Daytona, ElevenLabs, Gemini, and CodeRabbit.
+      <footer className="border-t py-12 bg-muted/20 relative z-10">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            Built with Next.js, Daytona, MiniMax Live, and CodeRabbit.
+          </p>
+        </div>
       </footer>
     </div>
   );

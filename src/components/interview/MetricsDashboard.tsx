@@ -155,7 +155,7 @@ export function MetricsDashboard() {
                     </li>
                     <li className="flex items-start gap-2">
                         <span className="text-green-500 mt-1 flex-shrink-0 w-6 text-center">✓</span>
-                        <span className="flex-1">AI-powered code analysis with CodeRabbit + Gemini</span>
+                        <span className="flex-1">AI-powered code analysis with CodeRabbit + MiniMax</span>
                     </li>
                     <li className="flex items-start gap-2">
                         <span className="text-green-500 mt-1 flex-shrink-0 w-6 text-center">✓</span>

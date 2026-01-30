@@ -1,12 +1,53 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { CodeRabbitReview } from './coderabbit';
+import { LARGE_PASTE_THRESHOLD } from './constants';
 
 interface ReviewResult {
   score: number;
+  security_score?: number;
   complexity: string;
   issues: string[];
+  security_issues?: string[];
   reasoning_trace: string;
+}
+
+// Conversation transcript entry
+interface TranscriptMessage {
+  timestamp: number;
+  speaker: 'agent' | 'user';
+  message: string;
+  type?: 'text' | 'audio';
+}
+
+// Test execution result
+interface TestResult {
+  timestamp: number;
+  problemId: string;
+  testsPassed: number;
+  testsTotal: number;
+  executionTime?: number;
+  details: any;
+}
+
+// Practice session for practice interviews
+interface PracticeSession {
+  id: string;
+  timestamp: number;
+  companyId: string;
+  problemId: string;
+  score: number;
+  skillLevel: string;
+  improvementAreas: string[];
+  duration: number;
+}
+
+// Workspace status types
+export type WorkspaceStatus = 'idle' | 'creating' | 'installing' | 'ready' | 'error';
+
+interface WorkspaceProgress {
+  step: string;
+  progress: number;
 }
 
 interface InterviewState {
@@ -17,13 +58,23 @@ interface InterviewState {
   setStatus: (status: 'idle' | 'active' | 'completed') => void;
 
   // Code
-  language: string; 
+  language: string;
   code: string;
   workspaceId: string | null;
+  currentProblemId: string | null;
   setCode: (code: string) => void;
   setLanguage: (lang: string) => void;
   setWorkspaceId: (id: string | null) => void;
-  
+  setCurrentProblemId: (id: string | null) => void;
+
+  // Workspace Status (for progress indicator)
+  workspaceStatus: WorkspaceStatus;
+  workspaceProgress: WorkspaceProgress;
+  workspaceError: string | null;
+  setWorkspaceStatus: (status: WorkspaceStatus) => void;
+  setWorkspaceProgress: (progress: WorkspaceProgress) => void;
+  setWorkspaceError: (error: string | null) => void;
+
   // Console
   consoleOutput: { type: 'stdout' | 'stderr' | 'system' | 'agent'; content: string }[];
   addLog: (log: string, type?: 'stdout' | 'stderr' | 'system' | 'agent') => void;
@@ -32,7 +83,7 @@ interface InterviewState {
   // Analysis
   latestReview: ReviewResult | null;
   setReview: (review: ReviewResult | null) => void;
-  
+
   // CodeRabbit Analysis
   coderabbitReview: CodeRabbitReview | null;
   setCodeRabbitReview: (review: CodeRabbitReview | null) => void;
@@ -47,9 +98,32 @@ interface InterviewState {
   addPasteEvent: (length: number) => void;
   getIntegrityReport: () => string;
 
+  // Conversation Transcript
+  transcript: TranscriptMessage[];
+  addTranscriptMessage: (speaker: 'agent' | 'user', message: string, type?: 'text' | 'audio') => void;
+  clearTranscript: () => void;
+
+  // Test Results
+  testResults: TestResult[];
+  addTestResult: (result: TestResult) => void;
+  clearTestResults: () => void;
+
   // Demo / Wizard Mode
   isWizardMode: boolean;
   toggleWizardMode: () => void;
+
+  // Practice Interview Mode
+  interviewMode: 'real' | 'practice';
+  setInterviewMode: (mode: 'real' | 'practice') => void;
+  selectedCompanyId: string | null;
+  setSelectedCompanyId: (id: string | null) => void;
+  practiceHistory: PracticeSession[];
+  addPracticeSession: (session: PracticeSession) => void;
+  clearPracticeHistory: () => void;
+
+  // Agent disconnect callback (for ending interview)
+  agentDisconnect: (() => void) | null;
+  setAgentDisconnect: (callback: (() => void) | null) => void;
 }
 
 export const useInterviewStore = create<InterviewState>()(
@@ -63,16 +137,26 @@ export const useInterviewStore = create<InterviewState>()(
 
       // Code
       language: 'python',
-      code: "// Write your solution here\nprint('Hello World')",
+      code: "# Write your solution here\nprint('Hello World')",
       workspaceId: null,
+      currentProblemId: null,
       setCode: (code) => set({ code }),
       setLanguage: (language) => set({ language }),
       setWorkspaceId: (id) => set({ workspaceId: id }),
+      setCurrentProblemId: (id) => set({ currentProblemId: id }),
+
+      // Workspace Status
+      workspaceStatus: 'idle',
+      workspaceProgress: { step: '', progress: 0 },
+      workspaceError: null,
+      setWorkspaceStatus: (workspaceStatus) => set({ workspaceStatus }),
+      setWorkspaceProgress: (workspaceProgress) => set({ workspaceProgress }),
+      setWorkspaceError: (workspaceError) => set({ workspaceError }),
 
       // Console
       consoleOutput: [],
-      addLog: (log, type = 'system') => set((state) => ({ 
-        consoleOutput: [...state.consoleOutput, { type, content: log }] 
+      addLog: (log, type = 'system') => set((state) => ({
+        consoleOutput: [...state.consoleOutput, { type, content: log }]
       })),
       clearLogs: () => set({ consoleOutput: [] }),
 
@@ -92,40 +176,123 @@ export const useInterviewStore = create<InterviewState>()(
       },
       addBlurEvent: () => set((state) => ({
         integrity: {
-            ...state.integrity,
-            blurCount: state.integrity.blurCount + 1
+          ...state.integrity,
+          blurCount: state.integrity.blurCount + 1
         }
       })),
       addPasteEvent: (length) => set((state) => {
-        const isLarge = length > 50;
+        const isLarge = length > LARGE_PASTE_THRESHOLD;
         return {
-            integrity: {
-                ...state.integrity,
-                pasteCount: state.integrity.pasteCount + 1,
-                largePasteEvents: isLarge 
-                    ? [...state.integrity.largePasteEvents, { timestamp: Date.now(), length }] 
-                    : state.integrity.largePasteEvents
-            }
+          integrity: {
+            ...state.integrity,
+            pasteCount: state.integrity.pasteCount + 1,
+            largePasteEvents: isLarge
+              ? [...state.integrity.largePasteEvents, { timestamp: Date.now(), length }]
+              : state.integrity.largePasteEvents
+          }
         };
       }),
       getIntegrityReport: () => {
         const state = get();
         const { blurCount, pasteCount, largePasteEvents } = state.integrity;
-        return `Integrity Report: User has left the tab ${blurCount} times. Detected ${pasteCount} paste events, with ${largePasteEvents.length} large pastes (>50 chars).`;
+        return `Integrity Report: User has left the tab ${blurCount} times. Detected ${pasteCount} paste events, with ${largePasteEvents.length} large pastes (>${LARGE_PASTE_THRESHOLD} chars).`;
       },
+
+      // Conversation Transcript
+      transcript: [],
+      addTranscriptMessage: (speaker, message, type = 'audio') => set((state) => ({
+        transcript: [...state.transcript, {
+          timestamp: Date.now(),
+          speaker,
+          message,
+          type
+        }]
+      })),
+      clearTranscript: () => set({ transcript: [] }),
+
+      // Test Results
+      testResults: [],
+      addTestResult: (result) => set((state) => ({
+        testResults: [...state.testResults, result]
+      })),
+      clearTestResults: () => set({ testResults: [] }),
 
       // Wizard Mode
       isWizardMode: false,
       toggleWizardMode: () => set((state) => ({ isWizardMode: !state.isWizardMode })),
+
+      // Practice Interview Mode
+      interviewMode: 'real',
+      setInterviewMode: (interviewMode) => set({ interviewMode }),
+      selectedCompanyId: null,
+      setSelectedCompanyId: (selectedCompanyId) => set({ selectedCompanyId }),
+      practiceHistory: [],
+      addPracticeSession: (session) => set((state) => ({
+        practiceHistory: [...state.practiceHistory, session]
+      })),
+      clearPracticeHistory: () => set({ practiceHistory: [] }),
+
+      // Agent disconnect callback
+      agentDisconnect: null,
+      setAgentDisconnect: (callback) => set({ agentDisconnect: callback }),
     }),
     {
       name: 'interview-storage',
+      version: 4,
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ 
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Partial<InterviewState>;
+        if (version === 0) {
+          // Migrate from version 0 (no integrity field)
+          return {
+            ...state,
+            integrity: state.integrity || {
+              blurCount: 0,
+              pasteCount: 0,
+              largePasteEvents: []
+            }
+          };
+        }
+        if (version === 1) {
+          // Migrate from version 1: Fix JavaScript comments in Python code
+          const code = state.code || '';
+          const language = state.language || 'python';
+          if (language === 'python' && code.includes('// Write your solution here')) {
+            return {
+              ...state,
+              code: "# Write your solution here\nprint('Hello World')"
+            };
+          }
+        }
+        if (version === 2) {
+          // Migrate from version 2: Add workspace status fields
+          return {
+            ...state,
+            workspaceStatus: 'idle',
+            workspaceProgress: { step: '', progress: 0 },
+            workspaceError: null
+          };
+        }
+        if (version === 3) {
+          // Migrate from version 3: Add practice interview mode fields
+          return {
+            ...state,
+            interviewMode: 'real',
+            selectedCompanyId: null,
+            practiceHistory: []
+          };
+        }
+        return state as InterviewState;
+      },
+      partialize: (state) => ({
         code: state.code,
         language: state.language,
-        isWizardMode: state.isWizardMode // Persist wizard mode preference
-      }), 
+        isWizardMode: state.isWizardMode, // Persist wizard mode preference
+        interviewMode: state.interviewMode, // Persist interview mode preference
+        selectedCompanyId: state.selectedCompanyId, // Persist selected company for practice mode
+        currentProblemId: state.currentProblemId, // Persist current problem
+        practiceHistory: state.practiceHistory // Persist practice history
+      }),
     }
   )
 );

@@ -30,5 +30,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "REFERENCES"]
+  "exclude": ["node_modules", "REFERENCES", "shifu---ai-technical-interviewer", "remotion-video"]
 }

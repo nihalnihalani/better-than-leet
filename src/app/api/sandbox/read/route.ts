@@ -1,19 +1,22 @@
-import { NextResponse } from 'next/server';
 import { daytonaService } from '@/lib/daytona';
+import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
+import { ReadFileRequestSchema, validateRequest } from '@/lib/schemas';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { workspaceId, path } = body;
 
-    if (!workspaceId || !path) {
-      return NextResponse.json({ error: 'Workspace ID and path are required' }, { status: 400 });
+    // Validate request using Zod schema
+    const validation = validateRequest(ReadFileRequestSchema, body);
+    if (!validation.success) {
+      return errorResponse(validation.error || 'Invalid request', 400, 'VALIDATION_ERROR');
     }
 
+    const { workspaceId, path } = validation.data!;
+
     const content = await daytonaService.readFile(workspaceId, path);
-    return NextResponse.json({ content });
+    return successResponse({ content });
   } catch (error) {
-    console.error('API Read File Error:', error);
-    return NextResponse.json({ error: 'Failed to read file' }, { status: 500 });
+    return handleApiError(error, 'API Read File Error');
   }
 }

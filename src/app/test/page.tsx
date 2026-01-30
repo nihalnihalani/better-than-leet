@@ -107,7 +107,7 @@ export default function TestPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Gemini Analysis</CardTitle>
+              <CardTitle>MiniMax Analysis</CardTitle>
               <Button size="sm" onClick={handleAnalyze} disabled={isAnalyzing}>
                 <Sparkles className="w-4 h-4 mr-2" />
                 Analyze Code

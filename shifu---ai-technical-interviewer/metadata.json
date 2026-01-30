@@ -1,0 +1,7 @@
+{
+  "name": "Shifu - AI Technical Interviewer",
+  "description": "A live coding environment where an AI interviewer named Shifu conducts a technical assessment using the Gemini Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

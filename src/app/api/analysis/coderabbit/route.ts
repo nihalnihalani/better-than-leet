@@ -1,25 +1,38 @@
-import { NextResponse } from 'next/server';
 import { codeRabbitService } from '@/lib/coderabbit';
+import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
+import { CodeRabbitRequestSchema, WorkspaceIdSchema, validateRequest } from '@/lib/schemas';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code, language, workspaceId } = body;
 
-    if (workspaceId) {
-        // Run analysis inside the sandbox
-        const review = await codeRabbitService.analyzeSandbox(workspaceId);
-        return NextResponse.json(review);
+    // If only workspaceId is provided, analyze sandbox
+    if (body.workspaceId && !body.code) {
+      const wsValidation = validateRequest(WorkspaceIdSchema, body.workspaceId);
+      if (!wsValidation.success) {
+        return errorResponse(wsValidation.error || 'Invalid workspace ID', 400, 'VALIDATION_ERROR');
+      }
+      const review = await codeRabbitService.analyzeSandbox(body.workspaceId);
+      return successResponse(review);
     }
 
-    if (!code) {
-      return NextResponse.json({ error: 'Code is required if workspaceId is not provided' }, { status: 400 });
+    // Validate full request with code
+    const validation = validateRequest(CodeRabbitRequestSchema, body);
+    if (!validation.success) {
+      return errorResponse(validation.error || 'Invalid request', 400, 'VALIDATION_ERROR');
+    }
+
+    const { code, language, workspaceId } = validation.data!;
+
+    // If workspaceId is provided with code, analyze sandbox
+    if (workspaceId) {
+      const review = await codeRabbitService.analyzeSandbox(workspaceId);
+      return successResponse(review);
     }
 
     const review = await codeRabbitService.analyzeCode(code, language || 'python');
-    return NextResponse.json(review);
+    return successResponse(review);
   } catch (error) {
-    console.error('CodeRabbit Analysis Error:', error);
-    return NextResponse.json({ error: 'Failed to analyze code with CodeRabbit' }, { status: 500 });
+    return handleApiError(error, 'CodeRabbit Analysis Error');
   }
 }

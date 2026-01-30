@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle, CheckCircle, BrainCircuit, Shield, ShieldAlert } from 'lucide-react';
@@ -17,7 +19,7 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
     return (
       <div className="flex flex-col items-center justify-center p-8 text-gray-400 animate-pulse">
         <BrainCircuit className="w-8 h-8 mb-2 animate-spin-slow" />
-        <p>Gemini is analyzing your code...</p>
+        <p>MiniMax is analyzing your code...</p>
       </div>
     );
   }
@@ -25,7 +27,7 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
   if (!result) return null;
 
   return (
-    <div className="space-y-4">
+    <div id="analysis-container" className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="p-4 rounded-lg bg-gray-800 border border-gray-700">
           <div className="text-sm text-gray-400 mb-1">Quality Score</div>

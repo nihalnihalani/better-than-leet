@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse, handleApiError } from '@/lib/api-utils';
+import { DEFAULT_VOICE_ID } from '@/lib/constants';
+import { TTSRequestSchema, validateRequest } from '@/lib/schemas';
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const body = await req.json();
 
-    if (!text) {
-      return NextResponse.json({ error: 'Text is required' }, { status: 400 });
+    // Validate request using Zod schema
+    const validation = validateRequest(TTSRequestSchema, body);
+    if (!validation.success) {
+      return errorResponse(validation.error || 'Invalid request', 400, 'VALIDATION_ERROR');
     }
 
-    const voiceId = "cgSgspJ2msm6clMCkdW9"; // Default Jessica
+    const { text, voiceId } = validation.data!;
+
+    const selectedVoiceId = voiceId || DEFAULT_VOICE_ID;
     const apiKey = process.env.ELEVENLABS_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+      return errorResponse('API key not configured', 500, 'MISSING_API_KEY');
     }
 
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -33,11 +40,19 @@ export async function POST(req: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      return NextResponse.json({ error: errorText }, { status: response.status });
+      // Parse error text if it's JSON to get a cleaner message
+      let errorMessage = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.detail?.message || errorJson.message || errorText;
+      } catch {
+        // Keep original error text if not JSON
+      }
+      return errorResponse(errorMessage, response.status, 'TTS_API_ERROR');
     }
 
     const audioBuffer = await response.arrayBuffer();
-    
+
     return new NextResponse(audioBuffer, {
       headers: {
         'Content-Type': 'audio/mpeg',
@@ -46,7 +61,6 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('TTS Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiError(error, 'TTS Error');
   }
 }

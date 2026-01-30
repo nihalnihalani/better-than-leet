@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import type { editor } from 'monaco-editor';
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 import { useInterviewStore } from '@/lib/store';
 
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+
+// Minimum character threshold for paste events to be recorded
+const PASTE_CHAR_THRESHOLD = 50;
 
 interface CodeEditorProps {
   initialCode?: string;
@@ -16,16 +20,18 @@ interface CodeEditorProps {
   isRunning?: boolean;
 }
 
-export function CodeEditor({ 
-  initialCode = "// Write your code here", 
-  language = "javascript", 
+export function CodeEditor({
+  initialCode = "// Write your code here",
+  language = "javascript",
   onChange,
   onRun,
   isRunning = false
 }: CodeEditorProps) {
   const [code, setCode] = useState(initialCode);
+  const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const { addBlurEvent, addPasteEvent } = useInterviewStore();
 
+  // Tab switching detection via visibility change
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -40,24 +46,30 @@ export function CodeEditor({
     };
   }, [addBlurEvent]);
 
-  const handleEditorChange = (value: string | undefined) => {
-    // Basic paste detection heuristic: 
-    // If change length is significantly large compared to typing speed, it might be a paste.
-    // However, Monaco has specific onPaste events we can't easily hook into via this simple wrapper 
-    // without using onMount. For now, we rely on the editor wrapper or assume changes > X chars are pastes 
-    // if we wanted to be strict. 
-    // But better: we will handle paste in onMount if we had it exposed. 
-    // Since we don't have onMount exposed in props easily here without changing interface, 
-    // let's try to detect sudden large text changes in onChange.
-    
-    if (value && code) {
-        const diff = Math.abs(value.length - code.length);
-        if (diff > 10) { // Arbitrary threshold for "fast typing" vs paste
-             // This is a rough heuristic. Ideally use editor.onDidPaste
-             addPasteEvent(diff);
-        }
-    }
+  // Handle Monaco editor mount and attach paste event listener
+  const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor) => {
+    editorRef.current = editorInstance;
 
+    // Use Monaco's native onDidPaste event for accurate paste detection
+    editorInstance.onDidPaste((e) => {
+      const pastedTextLength = e.range.endColumn - e.range.startColumn +
+        (e.range.endLineNumber - e.range.startLineNumber) * 50; // Approximate length for multi-line pastes
+
+      // Get the actual pasted text length from the model
+      const model = editorInstance.getModel();
+      if (model) {
+        const pastedText = model.getValueInRange(e.range);
+        const actualLength = pastedText.length;
+
+        if (actualLength >= PASTE_CHAR_THRESHOLD) {
+          addPasteEvent(actualLength);
+          console.log(`Paste detected - ${actualLength} characters`);
+        }
+      }
+    });
+  };
+
+  const handleEditorChange = (value: string | undefined) => {
     setCode(value || "");
     onChange?.(value);
   };
@@ -81,13 +93,14 @@ export function CodeEditor({
           {isRunning ? "Running..." : "Run"}
         </Button>
       </div>
-      <div className="flex-1 min-h-[400px]">
+      <div className="flex-1">
         <Editor
           height="100%"
           defaultLanguage={language}
           defaultValue={initialCode}
           theme="vs-dark"
           onChange={handleEditorChange}
+          onMount={handleEditorMount}
           options={{
             minimap: { enabled: false },
             fontSize: 14,

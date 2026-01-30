@@ -1,38 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { generateAutoFix } from '@/lib/gemini';
+import { NextRequest } from 'next/server';
+import { generateAutoFix } from '@/lib/minimax';
 import { daytonaService } from '@/lib/daytona';
+import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
+import { AutoFixRequestSchema, validateRequest } from '@/lib/schemas';
 
 export async function POST(req: NextRequest) {
   try {
-    const { code, error, language, workspaceId } = await req.json();
+    const body = await req.json();
 
-    if (!code || !error) {
-      return NextResponse.json({ error: 'Missing code or error' }, { status: 400 });
+    // Validate request using Zod schema
+    const validation = validateRequest(AutoFixRequestSchema, body);
+    if (!validation.success) {
+      return errorResponse(validation.error || 'Invalid request', 400, 'VALIDATION_ERROR');
     }
+
+    const { code, error, language, workspaceId } = validation.data!;
 
     const result = await generateAutoFix(code, error, language || 'python');
 
     if (!result) {
-        return NextResponse.json({ error: 'Failed to generate fix' }, { status: 500 });
+      return errorResponse('Failed to generate fix', 500, 'FIX_GENERATION_FAILED');
     }
 
     const { fixedCode, dependencies } = result;
     const installedPackages: string[] = [];
 
     if (dependencies && dependencies.length > 0 && workspaceId) {
-        // Determine package manager based on language
-        const manager = (language === 'javascript' || language === 'typescript') ? 'npm' : 'pip';
+      // Determine package manager based on language
+      const manager = (language === 'javascript' || language === 'typescript') ? 'npm' : 'pip';
 
-        for (const dep of dependencies) {
-            console.log(`Auto-installing dependency: ${dep}`);
-            await daytonaService.installPackage(workspaceId, dep, manager);
-            installedPackages.push(dep);
-        }
+      for (const dep of dependencies) {
+        console.log(`Auto-installing dependency: ${dep}`);
+        await daytonaService.installPackage(workspaceId, dep, manager);
+        installedPackages.push(dep);
+      }
     }
 
-    return NextResponse.json({ fixedCode, installedPackages });
+    return successResponse({ fixedCode, installedPackages });
   } catch (error) {
-    console.error('AutoFix API error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return handleApiError(error, 'AutoFix API Error');
   }
 }
