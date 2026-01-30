@@ -1,10 +1,17 @@
 import * as Sentry from "@sentry/nextjs";
 import { CoachingFeedback, DEFAULT_COACHING_FEEDBACK, calculateSkillLevel } from "./coaching";
 
-const MINIMAX_API_URL = "https://api.minimax.chat/v1/text/chatcompletion_v2";
-const MINIMAX_TTS_URL = "https://api.minimax.chat/v1/text_to_speech";
-const MINIMAX_API_KEY = process.env.MINIMAX_API_KEY || "";
-const MINIMAX_GROUP_ID = process.env.MINIMAX_GROUP_ID || ""; 
+// Support both api.minimax.io (official) and api.minimax.chat; keys from platform.minimax.io use .io
+const MINIMAX_API_BASE = (process.env.MINIMAX_API_BASE_URL || "https://api.minimax.io").replace(/\/$/, "");
+const MINIMAX_API_URL = `${MINIMAX_API_BASE}/v1/text/chatcompletion_v2`;
+// TTS on .io uses t2a_v2; .chat uses text_to_speech. Override with MINIMAX_TTS_BASE_URL if needed.
+const MINIMAX_TTS_BASE = (process.env.MINIMAX_TTS_BASE_URL || MINIMAX_API_BASE).replace(/\/$/, "");
+const MINIMAX_TTS_URL = MINIMAX_TTS_BASE.includes("api.minimax.io")
+  ? `${MINIMAX_TTS_BASE}/v1/t2a_v2`
+  : `${MINIMAX_TTS_BASE}/v1/text_to_speech`;
+const MINIMAX_API_KEY = (process.env.MINIMAX_API_KEY || "").trim();
+const MINIMAX_GROUP_ID = (process.env.MINIMAX_GROUP_ID || "").trim();
+const USE_OFFICIAL_IO = MINIMAX_API_BASE.includes("api.minimax.io"); 
 
 // Using MiniMax-M2.1 for code generation and refactoring as requested
 const MODEL_NAME = "MiniMax-M2.1";
@@ -50,22 +57,39 @@ interface MiniMaxResponse {
   };
 }
 
+// Convert to official api.minimax.io format (role/content) when using .io
+// NOTE: Do NOT include a "name" field — distinct names cause "group chat not supported" errors.
+function toOfficialMessages(messages: MiniMaxMessage[]): { role: string; content: string }[] {
+  return messages.map((m) => {
+    const role = m.sender_type === "BOT" ? "assistant" : (m.sender_name === "System" ? "system" : "user");
+    return { role, content: m.text };
+  });
+}
+
 export async function callMiniMax(messages: MiniMaxMessage[], temperature = 0.7, model = MODEL_NAME): Promise<string> {
   if (!MINIMAX_API_KEY) {
-    console.warn("MINIMAX_API_KEY is not set");
+    throw new Error("MINIMAX_API_KEY is not set. Add it to your .env.local file.");
   }
 
-  const payload = {
-    model: model,
-    messages: messages,
-    temperature: temperature,
-    tokens_to_generate: 4096,
-    stream: false,
-  };
+  // Do not use GroupId: api.minimax.io returns "group chat not supported" when it is present
+  const url = MINIMAX_API_URL;
 
-  const url = MINIMAX_GROUP_ID 
-    ? `${MINIMAX_API_URL}?GroupId=${MINIMAX_GROUP_ID}`
-    : MINIMAX_API_URL;
+  const payload = USE_OFFICIAL_IO
+    ? {
+        model: "M2-her",
+        messages: toOfficialMessages(messages),
+        temperature,
+        top_p: 0.95,
+        max_tokens: 1024,
+        stream: false,
+      }
+    : {
+        model,
+        messages,
+        temperature,
+        tokens_to_generate: 4096,
+        stream: false,
+      };
 
   const response = await fetch(url, {
     method: "POST",
@@ -82,15 +106,15 @@ export async function callMiniMax(messages: MiniMaxMessage[], temperature = 0.7,
   }
 
   const data = await response.json() as MiniMaxResponse;
-  
+
   if (data.base_resp && data.base_resp.status_code !== 0) {
-     throw new Error(`MiniMax API Error: ${data.base_resp.status_msg}`);
+    throw new Error(`MiniMax API Error: ${data.base_resp.status_msg}`);
   }
 
   if (data.choices && data.choices.length > 0) {
     return data.choices[0].message.content;
   }
-  
+
   return data.reply || "";
 }
 
@@ -99,8 +123,8 @@ export async function textToSpeech(text: string, voiceId = "male-qn-qingse"): Pr
     throw new Error("MINIMAX_API_KEY is not set");
   }
 
-  const payload = {
-    model: "speech-2.6-turbo", 
+  const payload: Record<string, unknown> = {
+    model: "speech-2.6-turbo",
     voice_setting: {
       voice_id: voiceId,
       speed: 1.0,
@@ -115,16 +139,19 @@ export async function textToSpeech(text: string, voiceId = "male-qn-qingse"): Pr
     },
     pronunciation_dict: {
       tone: [],
-      phoneme: []
+      phoneme: [],
     },
-    text: text,
+    text,
   };
+  if (MINIMAX_TTS_BASE.includes("api.minimax.io")) {
+    payload.stream = false;
+    payload.output_format = "hex";
+  }
   
-  const url = MINIMAX_GROUP_ID 
-    ? `${MINIMAX_TTS_URL}?GroupId=${MINIMAX_GROUP_ID}`
-    : MINIMAX_TTS_URL;
+  // Do not use GroupId: api.minimax.io returns "group chat not supported" when it is present
+  const ttsUrl = MINIMAX_TTS_URL;
 
-  const response = await fetch(url, {
+  const response = await fetch(ttsUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -134,19 +161,119 @@ export async function textToSpeech(text: string, voiceId = "male-qn-qingse"): Pr
   });
 
   if (!response.ok) {
-     const errorText = await response.text();
-     throw new Error(`MiniMax TTS Error: ${errorText}`);
+    const errorText = await response.text();
+    throw new Error(`MiniMax TTS Error: ${errorText}`);
   }
-  
-  const contentType = response.headers.get("content-type");
-  if (contentType && contentType.includes("application/json")) {
-      const data = await response.json();
-      if (data.base_resp && data.base_resp.status_code !== 0) {
-          throw new Error(`MiniMax TTS API Error: ${data.base_resp.status_msg}`);
+
+  const contentType = response.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    const data = await response.json() as { base_resp?: { status_code: number; status_msg: string }; data?: { audio?: string } };
+    if (data.base_resp && data.base_resp.status_code !== 0) {
+      throw new Error(`MiniMax TTS API Error: ${data.base_resp.status_msg}`);
+    }
+    // api.minimax.io T2A returns JSON with data.audio as hex string
+    if (data.data?.audio) {
+      const hex = data.data.audio;
+      const bytes = new Uint8Array(hex.length / 2);
+      for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
       }
+      return bytes.buffer;
+    }
   }
-  
+
   return await response.arrayBuffer();
+}
+
+// ============================================================================
+// Streaming TTS (WebSocket) - for lower latency, stream audio chunks
+// ============================================================================
+
+const MINIMAX_TTS_WS_URL = MINIMAX_TTS_BASE.includes("api.minimax.io")
+  ? MINIMAX_TTS_BASE.replace(/^https:\/\//, "wss://").replace(/\/$/, "") + "/ws/v1/t2a_v2"
+  : null;
+
+/** Yields audio chunks (Uint8Array) from MiniMax WebSocket TTS. Only works when using api.minimax.io. */
+export async function* textToSpeechStream(
+  text: string,
+  voiceId = "male-qn-qingse"
+): AsyncGenerator<Uint8Array, void, unknown> {
+  if (!MINIMAX_API_KEY) throw new Error("MINIMAX_API_KEY is not set");
+  if (!MINIMAX_TTS_WS_URL) throw new Error("Streaming TTS is only supported with api.minimax.io");
+
+  const wsMod = await import("ws");
+  const Ws = ((wsMod as { default?: unknown }).default ?? wsMod) as new (
+    url: string,
+    opts?: { headers: Record<string, string> }
+  ) => { on: (ev: string, fn: (data?: Buffer) => void) => void; send: (data: string) => void; close: () => void };
+  const ws = new Ws(MINIMAX_TTS_WS_URL, {
+    headers: { Authorization: `Bearer ${MINIMAX_API_KEY}` },
+  });
+
+  const open = new Promise<void>((resolve, reject) => {
+    ws.on("open", () => resolve());
+    ws.on("error", (err: unknown) => reject(err));
+  });
+
+  const messages: Buffer[] = [];
+  let resolveNext: (() => void) | null = null;
+  const waitNext = () => new Promise<void>((r) => { resolveNext = r; });
+
+  ws.on("message", (data?: Buffer) => {
+    if (data) messages.push(data);
+    if (resolveNext) {
+      resolveNext();
+      resolveNext = null;
+    }
+  });
+
+  await open;
+
+  const taskStart = {
+    event: "task_start",
+    model: "speech-2.6-turbo",
+    voice_setting: { voice_id: voiceId, speed: 1, vol: 1, pitch: 0 },
+    audio_setting: { sample_rate: 32000, bitrate: 128000, format: "mp3", channel: 1 },
+    pronunciation_dict: { tone: [], phoneme: [] },
+    continuous_sound: false,
+  };
+  ws.send(JSON.stringify(taskStart));
+
+  let taskStarted = false;
+  let sentContinue = false;
+
+  while (true) {
+    while (messages.length > 0) {
+      const raw = messages.shift()!;
+      let obj: { event?: string; data?: { audio?: string }; base_resp?: { status_code: number } };
+      try {
+        obj = JSON.parse(raw.toString("utf8")) as typeof obj;
+      } catch {
+        continue;
+      }
+      if (obj.event === "task_started") taskStarted = true;
+      if (obj.event === "task_failed" || (obj.base_resp && obj.base_resp.status_code !== 0)) {
+        ws.close();
+        throw new Error("MiniMax TTS WebSocket task failed");
+      }
+      if (obj.event === "task_finished") {
+        ws.close();
+        return;
+      }
+      if (obj.data?.audio) {
+        const hex = obj.data.audio;
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+        yield bytes;
+      }
+    }
+    if (taskStarted && !sentContinue) {
+      sentContinue = true;
+      ws.send(JSON.stringify({ event: "task_continue", text }));
+      ws.send(JSON.stringify({ event: "task_finish" }));
+    }
+    await waitNext();
+  }
 }
 
 // ============================================================================

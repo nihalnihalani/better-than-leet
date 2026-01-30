@@ -1,7 +1,10 @@
 /**
  * MiniMax Live Client
  * Replaces GeminiLiveClient using MiniMax REST API (LLM + TTS) and Browser STT.
+ * Features: interruption handling, audio queue with gapless playback, optional continuous listening.
  */
+
+const MAX_AUDIO_QUEUE_SIZE = 100;
 
 export type InterviewMode = 'real' | 'practice';
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -26,6 +29,17 @@ export class MiniMaxLiveClient {
   private problemContext: ProblemContext | null = null;
   private history: { role: 'user' | 'model'; content: string }[] = [];
   private lastCodeContext = "";
+
+  // Interruption + audio queue
+  private audioQueue: string[] = []; // base64 chunks
+  private currentSource: AudioBufferSourceNode | null = null;
+  private scheduledSources: AudioBufferSourceNode[] = [];
+  private abortController: AbortController | null = null;
+  private inFlightRequest = false;
+  private playbackLoopRunning = false;
+  private endOfUtteranceTimeout: ReturnType<typeof setTimeout> | null = null;
+  private pendingFinalTranscript = "";
+  private readonly END_OF_UTTERANCE_MS = 650;
 
   // Callbacks
   public onStatusChange: (status: ConnectionStatus) => void = () => {};
@@ -72,7 +86,7 @@ export class MiniMaxLiveClient {
       }
 
       this.recognition = new SpeechRecognition();
-      this.recognition.continuous = false; // Turn-based
+      this.recognition.continuous = true;
       this.recognition.interimResults = true;
       this.recognition.lang = 'en-US';
 
@@ -80,28 +94,41 @@ export class MiniMaxLiveClient {
         console.log("🎤 Listening...");
       };
 
-      this.recognition.onresult = async (event: any) => {
-        let interimTranscript = '';
+      // Interruption: user started speaking while model was talking
+      this.recognition.onspeechstart = () => {
+        if (this.isModelSpeaking()) {
+          this.handleInterruption();
+        }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.recognition.onresult = (event: any) => {
         let finalTranscript = '';
-        
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
             finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
           }
         }
-        
         if (finalTranscript) {
-           this.handleUserMessage(finalTranscript);
+          this.scheduleOrSendUserMessage(finalTranscript);
         }
       };
 
       this.recognition.onerror = (event: any) => {
-        console.error("Speech Recognition Error:", event.error);
-        if (event.error === 'not-allowed') {
-           this.onError(new Error("Microphone permission denied"));
+        const err = event.error || 'unknown';
+        if (err === 'not-allowed') {
+          this.onError(new Error("Microphone permission denied"));
+          return;
         }
+        if (err === 'network') {
+          this.onError(new Error("Voice input needs internet and works best in Chrome. Check your connection, then click Reconnect."));
+          return;
+        }
+        if (err === 'no-speech') {
+          // User didn't say anything - don't treat as fatal
+          return;
+        }
+        this.onError(new Error(`Speech recognition error: ${err}`));
       };
       
       this.recognition.onend = () => {
@@ -134,7 +161,7 @@ export class MiniMaxLiveClient {
       try {
         this.recognition.start();
         this.isListening = true;
-      } catch (e) {
+      } catch {
         // Already started
       }
     }
@@ -147,10 +174,158 @@ export class MiniMaxLiveClient {
     }
   }
 
+  private isModelSpeaking(): boolean {
+    return this.inFlightRequest || this.audioQueue.length > 0 || this.currentSource !== null || this.scheduledSources.length > 0;
+  }
+
+  private handleInterruption() {
+    this.clearAudioQueue();
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+    this.inFlightRequest = false;
+    this.onModelSpeaking(false);
+    this.onVolume(0);
+    this.onInterrupted();
+  }
+
+  /** End-of-utterance: after a short silence, send accumulated final transcript. */
+  private scheduleOrSendUserMessage(finalTranscript: string) {
+    this.pendingFinalTranscript = (this.pendingFinalTranscript ? this.pendingFinalTranscript + " " : "") + finalTranscript.trim();
+    if (this.endOfUtteranceTimeout) clearTimeout(this.endOfUtteranceTimeout);
+    this.endOfUtteranceTimeout = setTimeout(() => {
+      this.endOfUtteranceTimeout = null;
+      const toSend = this.pendingFinalTranscript.trim();
+      this.pendingFinalTranscript = "";
+      if (toSend) this.handleUserMessage(toSend);
+    }, this.END_OF_UTTERANCE_MS);
+  }
+
+  /** Stop all playback and clear queue (used on interrupt and disconnect). */
+  clearAudioQueue() {
+    for (const source of this.scheduledSources) {
+      try {
+        source.stop(0);
+        source.disconnect();
+      } catch {
+        // already stopped
+      }
+    }
+    this.scheduledSources = [];
+    if (this.currentSource) {
+      try {
+        this.currentSource.stop(0);
+        this.currentSource.disconnect();
+      } catch {
+        // already stopped
+      }
+      this.currentSource = null;
+    }
+    this.audioQueue = [];
+    this.playbackLoopRunning = false;
+    this.onModelSpeaking(false);
+    this.onVolume(0);
+  }
+
+  private enqueueAudio(base64Chunk: string) {
+    if (this.audioQueue.length >= MAX_AUDIO_QUEUE_SIZE) {
+      this.audioQueue.shift();
+    }
+    this.audioQueue.push(base64Chunk);
+    this.onModelSpeaking(true);
+    this.schedulePlaybackLoop();
+  }
+
+  private async schedulePlaybackLoop() {
+    if (!this.audioContext || this.playbackLoopRunning || this.audioQueue.length === 0) return;
+    this.playbackLoopRunning = true;
+
+    const base64 = this.audioQueue.shift()!;
+    let buffer: AudioBuffer;
+    try {
+      const binaryString = window.atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      buffer = await this.audioContext.decodeAudioData(bytes.buffer.slice(0));
+    } catch {
+      this.playbackLoopRunning = false;
+      if (this.audioQueue.length > 0) this.schedulePlaybackLoop();
+      else {
+        this.onModelSpeaking(false);
+        this.onVolume(0);
+        this.onTurnEnd();
+        this.startListening();
+      }
+      return;
+    }
+
+    const source = this.audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.audioContext.destination);
+    this.scheduledSources.push(source);
+    this.currentSource = source;
+
+    const playNext = () => {
+      const idx = this.scheduledSources.indexOf(source);
+      if (idx !== -1) this.scheduledSources.splice(idx, 1);
+      if (source === this.currentSource) this.currentSource = null;
+      this.onVolume(0);
+      if (this.audioQueue.length > 0) {
+        this.schedulePlaybackLoop();
+      } else if (this.scheduledSources.length === 0) {
+        this.playbackLoopRunning = false;
+        this.onModelSpeaking(false);
+        this.onTurnEnd();
+        this.startListening();
+      }
+    };
+
+    source.onended = playNext;
+
+    const ch0 = source.buffer!.getChannelData(0) as Float32Array;
+    const sum = ch0.reduce((a, s) => a + s * s, 0);
+    this.onVolume(Math.sqrt(sum / ch0.length) * 2);
+    source.start(0);
+  }
+
+  getProblemDescription(): string {
+    if (!this.problemContext) return "";
+    const p = this.problemContext;
+    const lines: string[] = [
+      p.title,
+      p.difficulty ? p.difficulty : "",
+      "",
+      p.description || "",
+      "",
+    ];
+    if (p.examples?.length) {
+      lines.push("Examples");
+      p.examples.forEach((e: any) => {
+        if (typeof e === "string") {
+          lines.push(e);
+        } else if (e && typeof e === "object") {
+          lines.push(`Input: ${e.input ?? ""}`);
+          lines.push(`Output: ${e.output ?? ""}`);
+          if (e.explanation) lines.push(`Explanation: ${e.explanation}`);
+        }
+      });
+      lines.push("");
+    }
+    if (p.constraints?.length) {
+      lines.push("Constraints");
+      p.constraints.forEach((c: string) => lines.push(c));
+    }
+    return lines.join("\n").trim();
+  }
+
   async handleUserMessage(text: string, silent = false) {
-    // Stop listening while processing to avoid hearing self
     this.stopListening();
     this.onModelSpeaking(true);
+
+    const controller = new AbortController();
+    this.abortController = controller;
+    this.inFlightRequest = true;
 
     try {
       const response = await fetch('/api/interview/chat', {
@@ -159,71 +334,124 @@ export class MiniMaxLiveClient {
         body: JSON.stringify({
           text,
           history: this.history,
-          context: this.lastCodeContext
-        })
+          context: this.lastCodeContext,
+          problemDescription: this.getProblemDescription(),
+          stream: true,
+        }),
+        signal: controller.signal,
       });
 
-      if (!response.ok) throw new Error("Chat API failed");
-
-      const data = await response.json();
-      
-      if (!silent) {
-        this.history.push({ role: 'user', content: text });
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => "No response body");
+        let errMessage: string;
+        try {
+          const parsed = JSON.parse(errorBody) as { error?: string };
+          errMessage = parsed.error || errorBody;
+        } catch {
+          errMessage = response.status === 401 ? "Invalid MiniMax API key. Check .env.local." : `Chat API failed (${response.status}).`;
+        }
+        throw new Error(errMessage);
       }
-      this.history.push({ role: 'model', content: data.text });
 
-      this.onMessage(data.text);
+      this.abortController = null;
+      this.inFlightRequest = false;
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (contentType.includes("text/event-stream")) {
+        await this.handleStreamResponse(response, silent, text);
+        return;
+      }
+
+      const data = await response.json() as { text?: string; audio?: string };
+      if (!silent) this.history.push({ role: 'user', content: text });
+      this.history.push({ role: 'model', content: data.text ?? '' });
+      this.onMessage(data.text ?? '');
 
       if (data.audio) {
-        await this.playAudio(data.audio);
+        this.enqueueAudio(data.audio);
+      } else {
+        this.onTurnEnd();
+        this.startListening();
       }
-      
-      this.onTurnEnd();
-
     } catch (error) {
-      console.error("Chat error:", error);
+      this.inFlightRequest = false;
+      this.abortController = null;
+      if (error instanceof Error && error.name === 'AbortError') return;
       this.onError(error instanceof Error ? error : new Error("Chat failed"));
-    } finally {
       this.onModelSpeaking(false);
-      this.startListening(); 
+      this.startListening();
     }
   }
 
-  async playAudio(base64Audio: string) {
-    if (!this.audioContext) return;
-    
+  private async handleStreamResponse(response: Response, silent: boolean, userText: string) {
+    if (!response.body) return;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let hadAudio = false;
+
+    if (!silent) this.history.push({ role: 'user', content: userText });
+
     try {
-      const binaryString = window.atob(base64Audio);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() ?? "";
+        for (const block of blocks) {
+          let event = "";
+          let dataLine = "";
+          for (const line of block.split("\n")) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            if (line.startsWith("data:")) dataLine = line.slice(5).trim();
+          }
+          if (event === "text" && dataLine) {
+            try {
+              const data = JSON.parse(dataLine) as { text?: string };
+              this.history.push({ role: 'model', content: data.text ?? '' });
+              this.onMessage(data.text ?? '');
+            } catch {
+              // ignore
+            }
+          }
+          if (event === "audio" && dataLine) {
+            hadAudio = true;
+            this.enqueueAudio(dataLine);
+          }
+          if (event === "error" && dataLine) {
+            try {
+              const data = JSON.parse(dataLine) as { error?: string };
+              this.onError(new Error(data.error ?? "Stream error"));
+            } catch {
+              this.onError(new Error("Stream error"));
+            }
+          }
+        }
       }
-      
-      const audioBuffer = await this.audioContext.decodeAudioData(bytes.buffer);
-      const source = this.audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.audioContext.destination);
-      source.start(0);
-      
-      // Visualize volume
-      // Simplified visualization for now
-      this.onVolume(0.5); 
-      
-      return new Promise<void>((resolve) => {
-        source.onended = () => {
-            this.onVolume(0);
-            resolve();
-        };
-      });
+      if (!hadAudio) {
+        this.onTurnEnd();
+        this.startListening();
+      }
     } catch (e) {
-      console.error("Audio playback error:", e);
+      this.onError(e instanceof Error ? e : new Error("Stream read failed"));
+      this.onModelSpeaking(false);
+      this.startListening();
     }
   }
 
   disconnect() {
+    if (this.endOfUtteranceTimeout) {
+      clearTimeout(this.endOfUtteranceTimeout);
+      this.endOfUtteranceTimeout = null;
+    }
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
     this.stopListening();
     this.recognition = null;
+    this.clearAudioQueue();
     if (this.audioContext) {
       this.audioContext.close();
       this.audioContext = null;
@@ -235,7 +463,7 @@ export class MiniMaxLiveClient {
     this.handleUserMessage(text);
   }
 
-  sendCodeContext(code: string, silent = true) {
+  sendCodeContext(code: string, _silent = true) {
     this.lastCodeContext = code;
   }
 
@@ -243,12 +471,6 @@ export class MiniMaxLiveClient {
       // Not implemented
   }
 
-  clearAudioQueue() {
-    if (this.audioContext) {
-        this.audioContext.suspend();
-        this.audioContext.resume();
-    }
-  }
 }
 
 // Export as GeminiLiveClient alias for compatibility
