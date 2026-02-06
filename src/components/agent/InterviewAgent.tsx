@@ -132,6 +132,15 @@ export function InterviewAgent() {
             console.warn("⚠️ Model didn't respond to user input");
         };
 
+        // Send initial code context when Gemini session is ready
+        client.onSetupComplete = () => {
+            const currentCode = useInterviewStore.getState().code;
+            if (currentCode && currentCode.trim()) {
+                console.log("📝 Sending initial code context to Gemini");
+                client.sendCodeContext(currentCode, true);
+            }
+        };
+
         clientRef.current = client;
         console.log(`🎙️ Gemini Live client initialized in ${mode} mode`);
 
@@ -293,7 +302,7 @@ export function InterviewAgent() {
             )}
 
             <div className="flex items-center gap-4 p-4 border rounded-xl bg-card">
-                <StatusIndicator status={status === 'connected' ? 'connected' : status === 'connecting' ? 'connecting' : 'disconnected'} />
+                <StatusIndicator status={status} />
 
                 <div className="flex-1 w-full min-w-0">
                     <Visualizer isSpeaking={isSpeaking || isModelSpeaking} volume={volume} />

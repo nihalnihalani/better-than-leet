@@ -1,32 +1,61 @@
 import { cn } from "@/lib/utils";
 
-export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "disconnecting";
+export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "disconnecting" | "error";
 
 export function StatusIndicator({ status }: { status: ConnectionStatus | string }) {
-  const colors: Record<string, string> = {
-    connected: "bg-green-500",
-    connecting: "bg-yellow-500",
-    disconnected: "bg-red-500",
-    disconnecting: "bg-orange-500",
+  const styles: Record<string, { color: string; dot: string; label: string }> = {
+    connected: {
+      color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      dot: "bg-emerald-500",
+      label: "Live"
+    },
+    connecting: {
+      color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+      dot: "bg-yellow-500",
+      label: "Connecting..."
+    },
+    disconnected: {
+      color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
+      dot: "bg-zinc-500",
+      label: "Offline"
+    },
+    disconnecting: {
+      color: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+      dot: "bg-orange-500",
+      label: "Disconnecting..."
+    },
+    error: {
+      color: "bg-red-500/10 text-red-500 border-red-500/20",
+      dot: "bg-red-500",
+      label: "Error"
+    }
   };
 
-  const labels: Record<string, string> = {
-    connected: "Live",
-    connecting: "Connecting...",
-    disconnected: "Offline",
-    disconnecting: "Disconnecting...",
-  };
-
-  const color = colors[status] || "bg-gray-500";
-  const label = labels[status] || status;
+  const normalizedStatus = status.toLowerCase();
+  const current = styles[normalizedStatus] || styles.disconnected;
 
   return (
-    <div className="flex items-center gap-2" aria-label={`Connection status: ${label}`}>
-      <div className={cn("w-3 h-3 rounded-full animate-pulse", color)} aria-hidden="true" />
-      <span className="sr-only">Status: {label}</span>
-      <span className="text-sm font-medium text-gray-300" aria-hidden="true">
-        {label}
+    <div
+      className={cn(
+        "flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-medium transition-all shadow-sm select-none",
+        current.color
+      )}
+      role="status"
+      aria-label={`Status: ${current.label}`}
+    >
+      <span className="relative flex h-2 w-2">
+        {(normalizedStatus === 'connected' || normalizedStatus === 'connecting') && (
+          <span className={cn(
+            "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+            current.dot
+          )}></span>
+        )}
+        <span className={cn(
+          "relative inline-flex rounded-full h-2 w-2",
+          current.dot
+        )}></span>
       </span>
+      <span>{current.label}</span>
     </div>
   );
 }
