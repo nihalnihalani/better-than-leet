@@ -21,7 +21,7 @@ export default function TestAgentPage() {
             return;
         }
 
-        const client = new GeminiLiveClient(apiKey);
+        const client = new GeminiLiveClient(apiKey.trim());
 
         client.onStatusChange = (s) => {
             setStatus(s);

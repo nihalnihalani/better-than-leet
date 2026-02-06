@@ -88,7 +88,7 @@ export function InterviewAgent() {
         // Create client with current interview mode (real or practice)
         const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
         console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
-        const client = new GeminiLiveClient(apiKey, mode);
+        const client = new GeminiLiveClient(apiKey.trim(), mode);
 
         client.onStatusChange = (s) => setStatus(s);
         client.onToolsCall = handleToolsCall;
