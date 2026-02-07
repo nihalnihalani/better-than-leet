@@ -2,8 +2,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Logo } from "@/components/ui/Logo";
-import { Mic, Sparkles, Lock, GraduationCap } from "lucide-react";
+import { Mic, Sparkles, Lock, GraduationCap, ListChecks, MessageSquare, BarChart3, ArrowRight } from "lucide-react";
+import Image from "next/image";
 import { StartInterviewButton } from "@/components/interview/StartInterviewButton";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export default function Home() {
   return (
@@ -18,9 +20,12 @@ export default function Home() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="font-bold text-xl flex items-center gap-2">
             <Logo size={32} />
-            Daytona Interview Sandbox
+            Alexis
           </div>
-          <StartInterviewButton size="default" showIcon={false} />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <StartInterviewButton size="default" showIcon={false} />
+          </div>
         </div>
       </header>
 
@@ -93,6 +98,52 @@ export default function Home() {
               </CardDescription>
             </CardHeader>
           </Card>
+        </div>
+
+        {/* How It Works */}
+        <div className="w-full max-w-4xl mt-24">
+          <h2 className="text-3xl font-bold mb-12">How It Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
+            {[
+              { step: 1, icon: ListChecks, title: "Choose Your Challenge", desc: "Select from curated problems or import your own from LeetCode." },
+              { step: 2, icon: MessageSquare, title: "Talk to Alexis", desc: "Have a real-time voice conversation while you code your solution." },
+              { step: 3, icon: BarChart3, title: "Get Your Report", desc: "Receive detailed performance analysis and actionable feedback." },
+            ].map((item, i) => (
+              <div key={i} className="flex flex-col items-center md:items-start gap-3 text-center md:text-left relative">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                  {item.step}
+                </div>
+                <item.icon className="w-8 h-8 text-muted-foreground" />
+                <h3 className="font-semibold text-lg">{item.title}</h3>
+                <p className="text-sm text-muted-foreground">{item.desc}</p>
+                {i < 2 && (
+                  <ArrowRight className="hidden md:block absolute -right-5 top-5 w-5 h-5 text-muted-foreground/40" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Built With */}
+        <div className="w-full max-w-4xl mt-24 mb-8">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-8">Built With</p>
+          <div className="flex flex-wrap items-center justify-center gap-10 opacity-70">
+            {[
+              { src: "/icons/gemini.png", alt: "Gemini", w: 100 },
+              { src: "/icons/daytona.png", alt: "Daytona", w: 100 },
+              { src: "/icons/coderabbit.png", alt: "CodeRabbit", w: 110 },
+              { src: "/icons/nextjs.png", alt: "Next.js", w: 80 },
+            ].map((logo) => (
+              <Image
+                key={logo.alt}
+                src={logo.src}
+                alt={logo.alt}
+                width={logo.w}
+                height={40}
+                className="h-8 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300"
+              />
+            ))}
+          </div>
         </div>
 
       </main>

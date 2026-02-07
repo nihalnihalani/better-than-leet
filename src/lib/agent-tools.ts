@@ -2,6 +2,7 @@ import { useInterviewStore, CustomProblem } from '@/lib/store';
 import { generateTestCode } from '@/lib/test-runner';
 import { Problem } from '@/data/problems';
 import { COMPANIES, CompanyProblem, getAllCompanyProblems, NEETCODE_CATEGORIES } from '@/data/company-problems';
+import { authFetch } from '@/lib/api-client';
 
 // Wrapper to catch tool errors and prevent disconnections
 const wrapTool = (name: string, fn: Function) => async (...args: any[]) => {
@@ -132,10 +133,10 @@ export const getAgentTools = (workspaceId: string | null) => ({
         // Find current problem from either source
         const currentProblem = getCurrentProblem();
         const testCode = currentProblem
-            ? generateTestCode(currentProblem, code)
+            ? generateTestCode(currentProblem, code, language)
             : code;
 
-        const response = await fetch('/api/sandbox/execute', {
+        const response = await authFetch('/api/sandbox/execute', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, code: testCode, language })

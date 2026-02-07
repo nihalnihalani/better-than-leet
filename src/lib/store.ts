@@ -71,6 +71,7 @@ interface WorkspaceProgress {
 interface InterviewState {
   // Session
   status: 'idle' | 'active' | 'completed';
+  interviewStartTime: number | null;
   startSession: () => void;
   endSession: () => void;
   setStatus: (status: 'idle' | 'active' | 'completed') => void;
@@ -155,7 +156,8 @@ export const useInterviewStore = create<InterviewState>()(
     (set, get) => ({
       // Session
       status: 'idle',
-      startSession: () => set({ status: 'active' }),
+      interviewStartTime: null,
+      startSession: () => set({ status: 'active', interviewStartTime: Date.now() }),
       endSession: () => set({ status: 'completed' }),
       setStatus: (status) => set({ status }),
 

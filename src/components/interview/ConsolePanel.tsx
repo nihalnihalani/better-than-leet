@@ -40,7 +40,7 @@ export function ConsolePanel({ output }: ConsolePanelProps) {
     <div className="flex flex-col h-full bg-[#0c0c0c] border-t border-gray-800 font-mono text-sm shadow-inner">
       <div className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] border-b border-gray-800 text-xs font-semibold text-gray-400 select-none">
         <Terminal className="w-3 h-3" />
-        NEURO-LINK CONSOLE
+        Console
         <div className="ml-auto flex gap-2">
             <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div> ONLINE</div>
         </div>

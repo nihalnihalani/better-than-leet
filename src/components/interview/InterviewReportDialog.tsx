@@ -13,6 +13,7 @@ import { useInterviewStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { authFetch } from "@/lib/api-client";
 
 interface InterviewReportDialogProps {
   open: boolean;
@@ -68,7 +69,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
     setError(null);
 
     try {
-      const response = await fetch('/api/interview/report', {
+      const response = await authFetch('/api/interview/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -327,7 +328,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
           </div>
         ) : null}
 
-        <div className="flex justify-end gap-2 mt-6 border-t border-gray-800 pt-6">
+        <div className="flex justify-end gap-2 mt-6 border-t border-gray-800 pt-6 no-print">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           <Button onClick={() => window.print()}>
             <FileDown className="w-4 h-4 mr-2" />

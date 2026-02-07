@@ -102,7 +102,7 @@ export function Visualizer({ isSpeaking, volume = 0 }: { isSpeaking: boolean, vo
   }, [isSpeaking, dimensions]); // Removed volume from deps to avoid re-effecting
 
   return (
-    <div ref={containerRef} className="w-full h-[50px] relative">
+    <div ref={containerRef} className="w-full h-[96px] relative">
       <canvas
         ref={canvasRef}
         className="rounded-md bg-black/20 w-full h-full block"

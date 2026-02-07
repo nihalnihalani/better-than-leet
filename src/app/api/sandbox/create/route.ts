@@ -2,8 +2,13 @@ import { daytonaService, CreateWorkspaceOptions } from '@/lib/daytona';
 import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
 import { DEFAULT_AUTO_STOP_INTERVAL } from '@/lib/constants';
 import { CreateWorkspaceRequestSchema, validateRequest } from '@/lib/schemas';
+import { validateSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
+  if (!validateSession(request)) {
+    return errorResponse('Unauthorized', 401, 'AUTH_ERROR');
+  }
+
   try {
     const body = await request.json();
 

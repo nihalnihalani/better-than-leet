@@ -183,6 +183,103 @@
     }
   }
 
+  .no-print {
+    /* marker class for print hiding */
+  }
+}
+
+/* Print styles for PDF export */
+@media print {
+  /* Hide everything behind the dialog */
+  body > *:not([data-radix-portal]) {
+    display: none !important;
+  }
+
+  /* Hide dialog overlay */
+  [data-radix-portal] [data-state] {
+    background: none !important;
+  }
+
+  /* Make dialog content fill the page naturally */
+  [data-radix-portal] [role="dialog"] {
+    position: static !important;
+    transform: none !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: black !important;
+    padding: 20px !important;
+  }
+
+  /* Hide close button and action buttons */
+  [data-radix-portal] [role="dialog"] > button[class*="absolute"] {
+    display: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Make cards print-friendly */
+  [data-radix-portal] [role="dialog"] [class*="Card"],
+  [data-radix-portal] [role="dialog"] [class*="card"] {
+    background: white !important;
+    border-color: #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* Ensure text is readable */
+  [data-radix-portal] [role="dialog"] * {
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Fix text colors for print */
+  [data-radix-portal] [role="dialog"] [class*="text-gray-300"],
+  [data-radix-portal] [role="dialog"] [class*="text-gray-400"],
+  [data-radix-portal] [role="dialog"] [class*="text-gray-500"] {
+    color: #333 !important;
+  }
+
+  [data-radix-portal] [role="dialog"] [class*="text-gray-200"],
+  [data-radix-portal] [role="dialog"] [class*="text-gray-100"] {
+    color: #111 !important;
+  }
+
+  /* Preserve colored score indicators */
+  [data-radix-portal] [role="dialog"] [class*="text-green"] {
+    color: #16a34a !important;
+  }
+
+  [data-radix-portal] [role="dialog"] [class*="text-red"] {
+    color: #dc2626 !important;
+  }
+
+  [data-radix-portal] [role="dialog"] [class*="text-yellow"] {
+    color: #ca8a04 !important;
+  }
+
+  [data-radix-portal] [role="dialog"] [class*="text-blue"] {
+    color: #2563eb !important;
+  }
+
+  [data-radix-portal] [role="dialog"] [class*="text-purple"] {
+    color: #9333ea !important;
+  }
+
+  /* Page layout */
+  @page {
+    margin: 15mm;
+    size: A4;
+  }
+}
+
+@layer utilities {
   .animate-color-wave {
     background: linear-gradient(to right,
         #3b82f6 20%,

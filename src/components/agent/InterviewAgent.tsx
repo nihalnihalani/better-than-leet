@@ -11,6 +11,7 @@ import { getAgentTools } from '@/lib/agent-tools';
 import { GeminiLiveClient, ConnectionStatus, InterviewMode, ProblemContext } from '@/lib/gemini-live-client';
 import { PROBLEMS } from '@/data/problems';
 import { COMPANIES } from '@/data/company-problems';
+import { authFetch } from '@/lib/api-client';
 
 export function InterviewAgent() {
     const { code, workspaceId, workspaceStatus, interviewMode, currentProblemId, selectedCompanyId, setAgentDisconnect } = useInterviewStore();
@@ -77,18 +78,38 @@ export function InterviewAgent() {
 
     // Initialize Client
     useEffect(() => {
-        const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-        console.log("🔑 Gemini API Key available:", !!apiKey, apiKey ? `(${apiKey.substring(0, 10)}...)` : '');
+        let cancelled = false;
 
-        if (!apiKey) {
-            console.error("❌ Gemini API Key missing! Set NEXT_PUBLIC_GEMINI_API_KEY in .env.local");
-            return;
-        }
+        async function initClient() {
+            // Try server-side proxy first, fall back to NEXT_PUBLIC_ env var
+            let apiKey: string | undefined;
+            try {
+                const res = await authFetch('/api/gemini/session');
+                const data = await res.json();
+                if (data.data?.apiKey) {
+                    apiKey = data.data.apiKey;
+                }
+            } catch {
+                // Server proxy unavailable, fall back
+            }
 
-        // Create client with current interview mode (real or practice)
-        const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
-        console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
-        const client = new GeminiLiveClient(apiKey.trim(), mode);
+            if (!apiKey) {
+                apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+            }
+
+            console.log("🔑 Gemini API Key available:", !!apiKey, apiKey ? `(${apiKey.substring(0, 10)}...)` : '');
+
+            if (!apiKey || cancelled) {
+                if (!apiKey) {
+                    console.error("❌ Gemini API Key missing! Set GEMINI_API_KEY in .env.local");
+                }
+                return;
+            }
+
+            // Create client with current interview mode (real or practice)
+            const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
+            console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
+            const client = new GeminiLiveClient(apiKey.trim(), mode);
 
         client.onStatusChange = (s) => setStatus(s);
         client.onToolsCall = handleToolsCall;
@@ -104,6 +125,10 @@ export function InterviewAgent() {
         client.onMessage = (msg) => {
              // Handle text transcript updates from model
              useInterviewStore.getState().addTranscriptMessage('agent', msg, 'audio');
+        };
+        client.onUserTranscript = (text) => {
+            // Handle user speech transcription from Gemini
+            useInterviewStore.getState().addTranscriptMessage('user', text, 'audio');
         };
         // New callbacks for natural conversation flow
         client.onInterrupted = () => {
@@ -150,9 +175,16 @@ export function InterviewAgent() {
                 clientRef.current.disconnect();
             }
         });
+        }
+
+        initClient();
 
         return () => {
-            client.disconnect();
+            cancelled = true;
+            if (clientRef.current) {
+                clientRef.current.disconnect();
+                clientRef.current = null;
+            }
             setAgentDisconnect(null);
         };
     }, [workspaceId, interviewMode, setAgentDisconnect]); // Re-init if workspace or interview mode changes
@@ -170,7 +202,7 @@ export function InterviewAgent() {
     const codeUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastCodeUpdateRef = useRef<number>(0);
 
-    // Send code updates to Gemini when candidate types (with debouncing)
+    // Send code updates to Gemini when candidate pauses typing (with longer debounce)
     useEffect(() => {
         // Only send if connected and code has meaningfully changed
         if (!clientRef.current?.isConnected() || status !== 'connected') {
@@ -180,32 +212,30 @@ export function InterviewAgent() {
         const currentCode = code || '';
         const previousCode = previousCodeRef.current;
 
-        // Calculate if change is significant (more than just a character or two)
-        const codeLengthDiff = Math.abs(currentCode.length - previousCode.length);
-        const isSignificantChange = codeLengthDiff > 20 ||
-            (currentCode.length > 0 && previousCode.length === 0) ||
-            currentCode.includes('\n') !== previousCode.includes('\n');
+        // Skip if code hasn't changed
+        if (currentCode === previousCode) return;
 
-        // Don't send too frequently (minimum 5 seconds between updates)
+        // Don't send too frequently (minimum 10 seconds between updates)
         const now = Date.now();
         const timeSinceLastUpdate = now - lastCodeUpdateRef.current;
 
-        if (isSignificantChange && timeSinceLastUpdate > 5000) {
-            // Clear any pending timeout
-            if (codeUpdateTimeoutRef.current) {
-                clearTimeout(codeUpdateTimeoutRef.current);
-            }
-
-            // Debounce: wait 2 seconds after typing stops before sending
-            codeUpdateTimeoutRef.current = setTimeout(() => {
-                if (clientRef.current?.isConnected() && currentCode.trim()) {
-                    console.log("📝 Sending code update to Gemini (debounced)");
-                    clientRef.current.sendCodeContext(currentCode, true);
-                    lastCodeUpdateRef.current = Date.now();
-                    previousCodeRef.current = currentCode;
-                }
-            }, 2000);
+        // Clear any pending timeout - user is still typing
+        if (codeUpdateTimeoutRef.current) {
+            clearTimeout(codeUpdateTimeoutRef.current);
         }
+
+        // Wait 5 seconds after typing stops before sending code context
+        // This ensures we don't interrupt the user while they're actively coding
+        const debounceMs = timeSinceLastUpdate > 10000 ? 5000 : 8000;
+
+        codeUpdateTimeoutRef.current = setTimeout(() => {
+            if (clientRef.current?.isConnected() && currentCode.trim()) {
+                console.log("📝 Sending code update to Gemini (user paused typing)");
+                clientRef.current.sendCodeContext(currentCode, true);
+                lastCodeUpdateRef.current = Date.now();
+                previousCodeRef.current = currentCode;
+            }
+        }, debounceMs);
 
         return () => {
             if (codeUpdateTimeoutRef.current) {
@@ -302,7 +332,15 @@ export function InterviewAgent() {
             )}
 
             <div className="flex items-center gap-4 p-4 border rounded-xl bg-card">
-                <StatusIndicator status={status} />
+                <div className="flex flex-col items-center gap-2">
+                    <StatusIndicator status={status} isModelSpeaking={isModelSpeaking} />
+                    {status === 'connected' && !isModelSpeaking && isSpeaking && (
+                        <div className="flex items-center gap-1 text-[10px] text-emerald-400">
+                            <Mic className="w-2.5 h-2.5 animate-pulse" />
+                            <span>Mic active</span>
+                        </div>
+                    )}
+                </div>
 
                 <div className="flex-1 w-full min-w-0">
                     <Visualizer isSpeaking={isSpeaking || isModelSpeaking} volume={volume} />

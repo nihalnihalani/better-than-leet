@@ -94,6 +94,8 @@ export class GeminiLiveClient {
   public onTurnEnd: () => void = () => {};
   public onModelSpeaking: (isSpeaking: boolean) => void = () => {};
   public onNoResponse: () => void = () => {};
+  public onSetupComplete: () => void = () => {};
+  public onUserTranscript: (text: string) => void = () => {};
 
   constructor(private apiKey: string, mode: InterviewMode = 'real') {
     this.apiKey = apiKey.trim();
@@ -275,7 +277,7 @@ export class GeminiLiveClient {
       : code;
 
     const contextMessage = silent
-      ? `[CONTEXT UPDATE - Candidate's current code in editor]\n\`\`\`\n${truncatedCode}\n\`\`\`\n[End of code - React naturally. If they seem stuck, offer guidance. If they're making progress, encourage them. Don't repeat back the entire code.]`
+      ? `[CONTEXT UPDATE - Candidate's current code in editor]\n\`\`\`\n${truncatedCode}\n\`\`\`\n[End of code update. DO NOT speak right now - the candidate may still be typing. Only comment if they address you directly or have clearly paused for a long time. When you do comment, keep it brief and ask about their approach rather than pointing out issues.]`
       : `Here's my current code:\n\`\`\`\n${truncatedCode}\n\`\`\``;
 
     console.log("📝 Sending code context to Gemini (length:", code.length, ")");
@@ -383,6 +385,7 @@ export class GeminiLiveClient {
       console.log("✅ Gemini Live setup complete - starting audio input...");
       this.isSetupComplete = true;
       this.startAudioInput();
+      this.onSetupComplete();
     }
 
     // Handle server content (audio/text/interruption/turnComplete)
@@ -403,6 +406,11 @@ export class GeminiLiveClient {
         }
 
         this.onTurnEnd();
+      }
+
+      // Handle user speech transcription from Gemini
+      if (msg.serverContent.inputTranscript) {
+        this.onUserTranscript(msg.serverContent.inputTranscript);
       }
 
       if (msg.serverContent.modelTurn) {
@@ -540,21 +548,30 @@ ${p.tags ? `**Tags:** ${p.tags.join(', ')}` : ''}
 **Problem Description:**
 ${p.description}
 
-**Examples:**
+**Examples (YOU MUST walk through at least one example with the candidate):**
 ${p.examples.map((ex, i) => `
 Example ${i + 1}:
 - Input: ${ex.input}
 - Output: ${ex.output}${ex.explanation ? `
 - Explanation: ${ex.explanation}` : ''}`).join('\n')}
 
-**Constraints:**
+**Constraints (MENTION these to the candidate):**
 ${p.constraints.map(c => `- ${c}`).join('\n')}
 
 **Function to Implement:** \`${p.functionName}\`
+${p.starterCode ? `
+**Starter Code (already in the candidate's editor):**
+\`\`\`
+${p.starterCode}
+\`\`\`` : ''}
 
 ---
 
-**START NOW:** Greet the candidate warmly (e.g., "Hey! I'm Alexis, nice to meet you!"), then present this problem in your own words. Don't read verbatim. Ask if they have questions before coding.
+**START NOW:** Greet the candidate warmly (e.g., "Hey! I'm Alexis, nice to meet you!"), then:
+1. Explain the problem in your own words
+2. Walk through at least ONE example step by step (e.g., "So for example, if the input is [2,7,11,15] and target is 9, we'd return [0,1] because 2+7=9")
+3. Mention the key constraints (e.g., "There's always exactly one solution" or "The array can be up to 10^4 elements")
+4. Ask "Does that make sense? Any questions before you start coding?"
 `;
   }
 
