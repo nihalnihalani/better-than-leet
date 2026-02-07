@@ -3,8 +3,13 @@ import * as Sentry from "@sentry/nextjs";
 import { successResponse, errorResponse, handleApiError } from '@/lib/api-utils';
 import { DEFAULT_EXECUTION_TIMEOUT } from '@/lib/constants';
 import { ExecuteCodeRequestSchema, validateRequest } from '@/lib/schemas';
+import { validateSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
+  if (!validateSession(request)) {
+    return errorResponse('Unauthorized', 401, 'AUTH_ERROR');
+  }
+
   try {
     const body = await request.json();
 

@@ -98,6 +98,10 @@ export const INTERVIEW_TOOLS = [
         name: "get_integrity_status",
         description: "Check if candidate has copy-pasted code or switched tabs.",
       },
+      {
+        name: "end_interview",
+        description: "End the interview session and generate the final report. Use this when the candidate says they want to end the interview, says 'I'm done with the interview', 'let's wrap up', 'end the interview', or similar. Always give a brief closing remark before calling this tool.",
+      },
     ],
   },
 ];

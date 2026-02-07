@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/ui/Logo';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { CompanySelector } from '@/components/practice/CompanySelector';
 import { ProblemSelector } from '@/components/practice/ProblemSelector';
 import { NeetCodeProblemSelector } from '@/components/practice/NeetCodeProblemSelector';
@@ -94,9 +95,10 @@ export default function PracticePage() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <Link href="/" className="font-bold text-xl flex items-center gap-2">
             <Logo size={32} />
-            Daytona Interview Sandbox
+            Alexis
           </Link>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <GraduationCap className="w-5 h-5 text-primary" />
             <span className="font-medium text-primary">Practice Mode</span>
           </div>

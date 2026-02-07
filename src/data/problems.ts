@@ -10,7 +10,9 @@ export interface Problem {
   }[];
   constraints: string[];
   starterCode: string;
+  starterCodeJS?: string;
   functionName: string;
+  functionNameJS?: string;
   testCases: {
     inputs: any[];
     expected: any;
@@ -56,7 +58,16 @@ You can return the answer in any order.`,
     """
     # Write your solution here
     pass`,
+    starterCodeJS: `/**
+ * @param {number[]} nums
+ * @param {number} target
+ * @return {number[]}
+ */
+function twoSum(nums, target) {
+    // Write your solution here
+}`,
     functionName: 'two_sum',
+    functionNameJS: 'twoSum',
     testCases: [
       { inputs: [[2, 7, 11, 15], 9], expected: [0, 1] },
       { inputs: [[3, 2, 4], 6], expected: [1, 2] },
@@ -98,7 +109,22 @@ def reverse_list(head):
     :rtype: ListNode
     """
     pass`,
+    starterCodeJS: `/**
+ * Definition for singly-linked list.
+ * function ListNode(val, next) {
+ *     this.val = (val===undefined ? 0 : val)
+ *     this.next = (next===undefined ? null : next)
+ * }
+ */
+/**
+ * @param {ListNode} head
+ * @return {ListNode}
+ */
+function reverseList(head) {
+    // Write your solution here
+}`,
     functionName: 'reverse_list',
+    functionNameJS: 'reverseList',
     testCases: [
       { inputs: [[1, 2, 3, 4, 5]], expected: [5, 4, 3, 2, 1] },
       { inputs: [[1, 2]], expected: [2, 1] },
@@ -154,7 +180,38 @@ lRUCache.get(1);    // return -1 (not found)`
 # obj = LRUCache(capacity)
 # param_1 = obj.get(key)
 # obj.put(key,value)`,
+    starterCodeJS: `/**
+ * @param {number} capacity
+ */
+class LRUCache {
+    constructor(capacity) {
+        // Write your solution here
+    }
+
+    /**
+     * @param {number} key
+     * @return {number}
+     */
+    get(key) {
+
+    }
+
+    /**
+     * @param {number} key
+     * @param {number} value
+     * @return {void}
+     */
+    put(key, value) {
+
+    }
+}
+
+// Your LRUCache object will be instantiated and called as such:
+// const obj = new LRUCache(capacity);
+// const param1 = obj.get(key);
+// obj.put(key, value);`,
     functionName: 'LRUCache',
+    functionNameJS: 'LRUCache',
     testCases: [
       { inputs: [2, [["put", 1, 1], ["put", 2, 2], ["get", 1], ["put", 3, 3], ["get", 2]]], expected: [null, null, 1, null, -1] }
     ]
