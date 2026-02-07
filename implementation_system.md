@@ -2,6 +2,17 @@
 
 This document describes how the **System Design Interview Agent** was built within Alexis, from architecture decisions to every file involved.
 
+## Separation Principle
+
+The system design agent is **completely isolated** from the interview agent. They share no logic, no tools, no state (except minimal routing fields in the main store). This ensures:
+
+- Changes to one agent never break the other
+- Each agent can evolve independently
+- Clear boundaries prevent accidental coupling
+- No shared tool handlers or WebSocket clients
+
+The only connection point is the `/interview` page which routes between the two agent UIs based on `interviewMode`.
+
 ---
 
 ## Table of Contents
@@ -130,7 +141,7 @@ export function getSystemDesignInstruction(topic: SystemDesignTopic): string {
 
 ## Tool Definitions (Gemini Function Calling)
 
-**File:** `src/lib/gemini-tools.ts`
+**File:** `src/lib/system-design-tools.ts` *(isolated from interview agent)*
 
 Three tool sets are defined:
 
@@ -168,9 +179,9 @@ The full coding interview tool set. Used as a fallback if `SYSTEM_DESIGN_TOOLS` 
 
 ## Tool Execution (Client-Side Handlers)
 
-**File:** `src/lib/agent-tools.ts`
+**File:** `src/lib/system-design-agent-tools.ts` *(isolated from interview agent)*
 
-All tools are executed client-side (in the browser). The `getAgentTools()` function returns an object of tool handlers. System-design-relevant tools:
+All tools are executed client-side (in the browser). The `getSystemDesignTools()` function returns an object of tool handlers. System-design tools:
 
 ### `update_diagram`
 
@@ -210,9 +221,9 @@ All tools are wrapped with `wrapTool()` which catches errors and prevents discon
 
 ## State Management (Zustand Store)
 
-**File:** `src/lib/store.ts`
+**File:** `src/lib/system-design-store.ts` *(isolated from interview agent)*
 
-The store was extended with system design fields (store version 6):
+A dedicated Zustand store manages all system design state (diagram, transcript, topic selection):
 
 ### Types
 
@@ -254,31 +265,31 @@ interface DiagramEdge {
 
 ### Persistence
 
-Diagram state is persisted to `localStorage` via Zustand's `persist` middleware:
+Diagram state is persisted to `localStorage` under the key `system-design-storage`:
 ```typescript
 partialize: (state) => ({
-  // ...other fields...
   selectedTopicId: state.selectedTopicId,
   diagramNodes: state.diagramNodes,
   diagramEdges: state.diagramEdges,
+  transcript: state.transcript,
 })
 ```
 
-Migration from version 5 → 6 adds default empty diagram state.
+This is completely separate from the main interview store (`interview-storage`).
 
 ---
 
 ## Gemini Live Client — WebSocket Integration
 
-**File:** `src/lib/gemini-live-client.ts`
+**File:** `src/lib/system-design-live-client.ts` *(isolated from interview agent)*
 
-The `GeminiLiveClient` class manages the raw WebSocket connection to the Gemini Live API. System-design-specific behavior:
+The `SystemDesignLiveClient` class manages the raw WebSocket connection specifically for system design interviews:
 
-### Mode Detection
+### Hardcoded for System Design
 
 ```typescript
-constructor(private apiKey: string, mode: InterviewMode = 'real') {
-  this.interviewMode = mode;
+constructor(private apiKey: string) {
+  // No mode parameter - always system design
 }
 
 setSystemDesignTopic(topicId: string) {
@@ -286,24 +297,18 @@ setSystemDesignTopic(topicId: string) {
 }
 ```
 
-### System Instruction Selection
+### System Instruction
 
-During `connect()`:
+Always uses the system design instruction:
 ```typescript
-if (this.interviewMode === 'system-design' && this.systemDesignTopic) {
-  systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
-} else {
-  systemInstruction = getSystemInstruction(this.interviewMode);
-}
+const systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
 ```
 
-### Tool Set Selection
+### Tool Set
 
-In the setup message:
+Always uses `SYSTEM_DESIGN_TOOLS`:
 ```typescript
-tools: (this.interviewMode === 'system-design' && !this.useFallbackTools)
-  ? SYSTEM_DESIGN_TOOLS
-  : INTERVIEW_TOOLS
+tools: SYSTEM_DESIGN_TOOLS
 ```
 
 ### WebSocket Setup Message
@@ -313,9 +318,17 @@ Sent on connection open. Includes:
 - Response modality: `AUDIO` only
 - Voice: `Aoede`
 - System instruction with topic-specific prompt
-- Tools: `SYSTEM_DESIGN_TOOLS` (or fallback)
+- Tools: `SYSTEM_DESIGN_TOOLS`
 - Real-time input config: VAD with high start sensitivity, low end sensitivity, 700ms silence duration
 - Input/output audio transcription enabled
+
+### Simplified Audio Pipeline
+
+No code context sending - the client only handles:
+- Microphone input → WebSocket
+- WebSocket audio output → speakers
+- Tool calls for diagram manipulation
+- Transcript tracking
 
 ### Audio Pipeline
 
@@ -445,16 +458,18 @@ Left sidebar showing interview context:
 3. **Components Checklist**: Shows each expected component with a check mark if a node of that type exists in the diagram. Displays progress as `(placed/total)`.
 4. **Discussion Points**: Numbered list of key areas to discuss.
 
-### Interview Agent Component
+### System Design Agent Component
 
-**File:** `src/components/agent/InterviewAgent.tsx`
+**File:** `src/components/agent/SystemDesignAgent.tsx` *(isolated from interview agent)*
 
-Handles Gemini Live client lifecycle. System-design-specific behavior:
+Dedicated agent UI for system design interviews:
 
-- Sets `client.setSystemDesignTopic(selectedTopicId)` when mode is `system-design`.
-- Skips sending initial code context on setup complete (`onSetupComplete`).
-- Skips code update debouncing entirely.
-- Context recovery on reconnection includes diagram state summary.
+- Uses `SystemDesignLiveClient` (not `GeminiLiveClient`)
+- Uses `useSystemDesignStore` (not `useInterviewStore`)
+- Calls `getSystemDesignTools()` (not `getAgentTools()`)
+- No workspace dependency - auto-starts immediately
+- No code context sending logic
+- Context recovery includes diagram state summary (nodes/edges)
 
 ---
 
@@ -476,38 +491,67 @@ This is injected as a text message 500ms after setup completes, giving the model
 
 ---
 
-## Fallback Strategy
+## Isolation Strategy
 
-The system has a graceful degradation path for tool compatibility:
+The system design agent is **completely isolated** from the interview agent:
 
-1. **Primary**: `SYSTEM_DESIGN_TOOLS` (5 tools including `update_diagram` with complex schema).
-2. **Fallback 1**: If Gemini returns 1008 (policy violation), retry with `INTERVIEW_TOOLS` (14 tools, simpler schemas). Diagram tools still work since `update_diagram` and `read_diagram` handlers exist in `agent-tools.ts`.
-3. **Fallback 2**: `MINIMAL_SYSTEM_DESIGN_TOOLS` (4 tools, no parameters) — defined but not currently auto-triggered. Available for manual use.
+### Separate Files (No Shared Logic)
 
-The fallback is tracked via `useFallbackTools` boolean in the client:
-```typescript
-if (this.interviewMode === 'system-design' && !this.useFallbackTools) {
-  this.useFallbackTools = true;
-  this.retryTimeoutId = setTimeout(() => this.connect(true), 500);
-  return;
-}
-```
+| Component | System Design | Interview Agent |
+|-----------|---------------|-----------------|
+| WebSocket Client | `system-design-live-client.ts` | `gemini-live-client.ts` |
+| Tool Declarations | `system-design-tools.ts` | `gemini-tools.ts` |
+| Tool Handlers | `system-design-agent-tools.ts` | `agent-tools.ts` |
+| Agent UI | `SystemDesignAgent.tsx` | `InterviewAgent.tsx` |
+| State Store | `system-design-store.ts` | `store.ts` |
+| System Prompt | `system-design-prompt.ts` | `interviewer-prompt.ts` |
+
+### Shared Files (Minimal Changes Only)
+
+| File | Change | Why |
+|------|--------|-----|
+| `store.ts` | Added `'system-design'` to `interviewMode` union + `selectedTopicId` field | Routing only - no diagram state |
+| `interview/page.tsx` | Early-return branch for system design layout | Route switching - no interview logic changes |
+
+### Benefits
+
+- **Zero coupling**: Changes to the interview agent never affect system design
+- **Independent evolution**: Each agent can be refactored without risk
+- **Clear boundaries**: Store isolation prevents state contamination
+- **No fallback complexity**: Each client uses its own tool set exclusively
 
 ---
 
 ## File Reference
 
+### System Design Only (Isolated Files)
+
 | File | Purpose |
 |------|---------|
 | `src/data/system-design-topics.ts` | Topic catalog (11 topics with metadata) |
 | `src/lib/system-design-prompt.ts` | AI system instruction for system design mode |
-| `src/lib/gemini-tools.ts` | Tool declarations (`SYSTEM_DESIGN_TOOLS`, `MINIMAL_SYSTEM_DESIGN_TOOLS`) |
-| `src/lib/agent-tools.ts` | Tool execution handlers (`update_diagram`, `read_diagram`) |
-| `src/lib/store.ts` | Zustand state (diagram nodes/edges, interview mode) |
-| `src/lib/gemini-live-client.ts` | WebSocket client (mode-aware setup, tool routing, fallback) |
-| `src/app/system-design/page.tsx` | Topic selection UI |
-| `src/app/interview/page.tsx` | Interview page (system design layout branch) |
+| `src/lib/system-design-tools.ts` | Tool declarations (`SYSTEM_DESIGN_TOOLS`, `MINIMAL_SYSTEM_DESIGN_TOOLS`) |
+| `src/lib/system-design-agent-tools.ts` | Tool execution handlers (`update_diagram`, `read_diagram`, `get_interview_mode`, `end_interview`, `read_transcript`) |
+| `src/lib/system-design-store.ts` | Zustand state (diagram nodes/edges, transcript, topic selection) |
+| `src/lib/system-design-live-client.ts` | WebSocket client hardcoded for system design |
+| `src/components/agent/SystemDesignAgent.tsx` | Agent UI component (no workspace, no code context) |
 | `src/components/diagram/DiagramCanvas.tsx` | React Flow canvas with BFS layout |
 | `src/components/diagram/CustomNodes.tsx` | 9 typed node components with icons/colors |
 | `src/components/diagram/SystemDesignPanel.tsx` | Side panel (phase tracker, component checklist) |
-| `src/components/agent/InterviewAgent.tsx` | Gemini client lifecycle, auto-start, reconnection |
+| `src/app/system-design/page.tsx` | Topic selection UI |
+
+### Shared Files (Minimal Changes)
+
+| File | System Design Usage | Change Made |
+|------|---------------------|-------------|
+| `src/lib/store.ts` | Routing only (`interviewMode`, `selectedTopicId`) | Added `'system-design'` to union type |
+| `src/app/interview/page.tsx` | Renders `SystemDesignInterviewLayout` when `mode === 'system-design'` | Early-return branch added |
+
+### Interview Agent Files (Untouched)
+
+These files were NOT modified:
+- `src/lib/gemini-live-client.ts`
+- `src/lib/gemini-tools.ts`
+- `src/lib/agent-tools.ts`
+- `src/components/agent/InterviewAgent.tsx`
+- `src/lib/interviewer-prompt.ts`

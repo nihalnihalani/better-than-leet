@@ -29,6 +29,11 @@ import { Volume2, VolumeX } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import confetti from "canvas-confetti";
 import Link from "next/link";
+import { SystemDesignAgent } from "@/components/agent/SystemDesignAgent";
+import MermaidDiagramCanvas from "@/components/diagram/MermaidDiagramCanvas";
+import { SystemDesignPanel } from "@/components/diagram/SystemDesignPanel";
+import { useSystemDesignStore } from "@/lib/system-design-store";
+import { Layers } from "lucide-react";
 
 export default function InterviewPage() {
   const {
@@ -56,6 +61,7 @@ export default function InterviewPage() {
     interviewStartTime,
     language,
     setLanguage,
+    selectedTopicId,
   } = useInterviewStore();
 
   const [mounted, setMounted] = useState(false);
@@ -71,13 +77,18 @@ export default function InterviewPage() {
   };
   const [lastError, setLastError] = useState<string | null>(null);
 
+  const isSystemDesign = interviewMode === 'system-design';
+
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 0);
     return () => clearTimeout(timer);
   }, []);
 
-  // Initialize interview mode and problem
+  // Initialize interview mode and problem (CODING INTERVIEW ONLY)
   useEffect(() => {
+    // Skip for system design mode
+    if (isSystemDesign) return;
+    
     // If in practice mode but no company/problem selected, user navigated directly - reset to real mode
     if (interviewMode === 'practice' && (!selectedCompanyId || !currentProblemId)) {
       setInterviewMode('real');
@@ -92,9 +103,9 @@ export default function InterviewPage() {
       setCurrentProblemId(PROBLEMS[0].id);
       setCode(PROBLEMS[0].starterCode);
     }
-  }, [interviewMode, currentProblemId, selectedCompanyId, setCurrentProblemId, setCode, setInterviewMode, setSelectedCompanyId]);
+  }, [isSystemDesign, interviewMode, currentProblemId, selectedCompanyId, setCurrentProblemId, setCode, setInterviewMode, setSelectedCompanyId]);
 
-  // Initialize workspace with progress tracking
+  // Initialize workspace with progress tracking (CODING INTERVIEW ONLY)
   const initWorkspace = async () => {
     setWorkspaceStatus('creating');
     setWorkspaceProgress({ step: 'Connecting to Daytona...', progress: 10 });
@@ -166,6 +177,9 @@ export default function InterviewPage() {
   };
 
   useEffect(() => {
+    // Skip for system design mode
+    if (isSystemDesign) return;
+    
     // Initialize session token first, then workspace
     initSession().then(() => initWorkspace());
 
@@ -191,7 +205,7 @@ export default function InterviewPage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once
+  }, [isSystemDesign]); // Run once
 
   const handleRun = async (codeToRun: string) => {
     if (!workspaceId) {
@@ -382,6 +396,12 @@ export default function InterviewPage() {
 
   if (!mounted) return null;
 
+  // SYSTEM DESIGN MODE - Render dedicated layout
+  if (isSystemDesign) {
+    return <SystemDesignInterviewLayout />;
+  }
+
+  // CODING INTERVIEW MODE - Render standard layout
   return (
     <div id="interface-container" className="h-screen w-full bg-background overflow-hidden flex flex-col">
       <header className="h-12 border-b flex items-center px-4 justify-between bg-card z-10">
@@ -488,6 +508,131 @@ export default function InterviewPage() {
 
       {/* Workspace Progress Indicator */}
       <WorkspaceProgressIndicator onRetry={initWorkspace} />
+    </div>
+  );
+}
+
+/**
+ * System Design Interview Layout
+ * Completely separate from the coding interview layout above
+ * Uses its own store (system-design-store) and agent (SystemDesignAgent)
+ */
+function SystemDesignInterviewLayout() {
+  const selectedTopicId = useSystemDesignStore((s) => s.selectedTopicId);
+  const setOnEndInterview = useSystemDesignStore((s) => s.setOnEndInterview);
+  const agentDisconnect = useSystemDesignStore((s) => s.agentDisconnect);
+  
+  const [mounted, setMounted] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
+
+  const toggleMute = () => {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    setMuted(next);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Check if topic is selected
+  useEffect(() => {
+    if (!selectedTopicId) {
+      window.location.href = '/system-design';
+    }
+  }, [selectedTopicId]);
+
+  // Initialize session
+  useEffect(() => {
+    initSession().then(() => {
+      useSystemDesignStore.getState().startSession();
+    });
+  }, []);
+
+  const handleEndInterview = async () => {
+    // Disconnect agent
+    const agentDisconnectFn = useSystemDesignStore.getState().agentDisconnect;
+    if (agentDisconnectFn) {
+      agentDisconnectFn();
+    }
+
+    playSound('complete');
+
+    // Navigate back to topic selection
+    window.location.href = '/system-design';
+  };
+
+  // Register end-interview callback
+  useEffect(() => {
+    setOnEndInterview(() => handleEndInterview);
+    return () => setOnEndInterview(null);
+  }, [setOnEndInterview]);
+
+  if (!mounted) return null;
+
+  return (
+    <div id="interface-container" className="h-screen w-full bg-background overflow-hidden flex flex-col">
+      <header className="h-12 border-b flex items-center px-4 justify-between bg-card z-10">
+        <Link href="/" className="font-bold flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <Logo size={24} />
+          Alexis
+        </Link>
+        <div className="text-xs text-muted-foreground flex items-center gap-4">
+          <Timer />
+          <button
+            onClick={toggleMute}
+            className="p-1 rounded hover:bg-accent transition-colors"
+            aria-label={soundMuted ? "Unmute sounds" : "Mute sounds"}
+            title={soundMuted ? "Unmute sounds" : "Mute sounds"}
+          >
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
+          <ThemeToggle />
+          <span className="text-primary flex items-center gap-1 bg-primary/10 px-2 py-1 rounded">
+            <Layers className="w-3 h-3" /> System Design
+          </span>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanelGroup direction="horizontal">
+          {/* Left Panel: Topic Info & Components Checklist */}
+          <ResizablePanel defaultSize={20} minSize={15}>
+            <SystemDesignPanel />
+          </ResizablePanel>
+
+          <ResizableHandle />
+
+          {/* Center Panel: Architecture Diagram */}
+          <ResizablePanel defaultSize={50} minSize={30}>
+            <MermaidDiagramCanvas />
+          </ResizablePanel>
+
+          <ResizableHandle />
+
+          {/* Right Panel: Agent & Transcript */}
+          <ResizablePanel defaultSize={30} minSize={20} className="bg-card border-l">
+            <div className="flex flex-col h-full overflow-hidden">
+              <div className="p-4 border-b shrink-0">
+                <SystemDesignAgent />
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-hidden border-b">
+                <TranscriptPanel />
+              </div>
+
+              <Controls
+                onRun={() => {}}
+                onEndInterview={handleEndInterview}
+                isRunning={false}
+                isFixing={false}
+                hasError={false}
+              />
+            </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
     </div>
   );
 }

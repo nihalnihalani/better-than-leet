@@ -1,20 +1,10 @@
 /**
- * Gemini Live Client v5
- * Hybrid approach: raw WebSocket (for reliable API key passing) + SDK message format
- * Features:
- * - Manual WebSocket URL construction with API key in query string
- * - Message format matching @google/genai SDK (fixes 1007 protocol errors)
- * - Voice Activity Detection (VAD) for natural turn-taking
- * - Interruption handling - stops when user speaks
- * - Proactive tool calling
- * - Connection retry with exponential backoff
- * - Audio capture with noise filtering
- * - Seamless audio playback with pre-scheduling
+ * System Design Live Client
+ * Dedicated WebSocket client for system design interviews
+ * Stripped of code/sandbox logic - focused only on diagram building via voice
  */
 
-import { INTERVIEW_TOOLS } from "./gemini-tools";
 import { SYSTEM_DESIGN_TOOLS, SYSTEM_DESIGN_TOOLS_FALLBACK } from "./system-design-tools";
-import { getSystemInstruction } from "./interviewer-prompt";
 import { getSystemDesignInstruction } from "./system-design-prompt";
 import { getSystemDesignTopic, type SystemDesignTopic } from "@/data/system-design-topics";
 
@@ -22,7 +12,7 @@ import { getSystemDesignTopic, type SystemDesignTopic } from "@/data/system-desi
 const INPUT_SAMPLE_RATE = 16000;  // Input MUST be 16kHz
 const OUTPUT_SAMPLE_RATE = 24000; // Output is always 24kHz
 
-// Use gemini-2.5-flash-native-audio for Live API
+// Model
 const MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025";
 
 // WebSocket endpoint
@@ -32,30 +22,14 @@ const API_VERSION = "v1beta";
 // Connection retry configuration
 const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
-const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
+const MAX_AUDIO_QUEUE_SIZE = 100;
 
 // After an interruption, if no model response within this time, nudge the model
 const POST_INTERRUPT_TIMEOUT_MS = 7000;
 
-// Interview mode type
-export type InterviewMode = 'real' | 'practice' | 'system-design';
-
-// Problem context to send to Gemini directly at startup
-export interface ProblemContext {
-  title: string;
-  difficulty: string;
-  description: string;
-  examples: Array<{ input: string; output: string; explanation?: string }>;
-  constraints: string[];
-  functionName: string;
-  starterCode?: string;
-  companyName?: string;
-  tags?: string[];
-}
-
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export class GeminiLiveClient {
+export class SystemDesignLiveClient {
   // WebSocket
   private ws: WebSocket | null = null;
   private _isConnected = false;
@@ -64,11 +38,7 @@ export class GeminiLiveClient {
   private audioContext: AudioContext | null = null;
   private outputAudioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
-  private interviewMode: InterviewMode = 'real';
-  private problemContext: ProblemContext | null = null;
   private systemDesignTopic: SystemDesignTopic | null = null;
-  private useFallbackTools = false;
-  private isInterviewEnding = false;
 
   // Audio Playback Queue
   private audioQueue: Float32Array[] = [];
@@ -81,6 +51,9 @@ export class GeminiLiveClient {
   private retryAttempts = 0;
   private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private isSetupComplete = false;
+  private isReconnection = false;
+  private reconnectionContext: string | null = null;
+  private isInterviewEnding = false;
 
   // Response tracking
   private lastResponseTime = 0;
@@ -92,9 +65,12 @@ export class GeminiLiveClient {
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private highPassFilter: BiquadFilterNode | null = null;
   private lowPassFilter: BiquadFilterNode | null = null;
-
+  
   // Microphone mute state
-  private micMuted = false;
+  private isMicMuted = false;
+  
+  // Tool fallback: if diagram tools cause 1008, retry without them
+  private useFallbackTools = false;
 
   // Callbacks
   public onStatusChange: (status: ConnectionStatus) => void = () => {};
@@ -109,23 +85,15 @@ export class GeminiLiveClient {
   public onSetupComplete: () => void = () => {};
   public onUserTranscript: (text: string) => void = () => {};
 
-  constructor(private apiKey: string, mode: InterviewMode = 'real') {
+  constructor(private apiKey: string) {
     this.apiKey = apiKey.trim();
-    this.interviewMode = mode;
-    console.log(`🔑 GeminiLiveClient API key: "${this.apiKey ? this.apiKey.substring(0, 10) + '...' + this.apiKey.substring(this.apiKey.length - 4) : 'EMPTY/UNDEFINED'}" (length: ${this.apiKey?.length ?? 0})`);
+    console.log(`🔑 SystemDesignLiveClient API key: "${this.apiKey ? this.apiKey.substring(0, 10) + '...' + this.apiKey.substring(this.apiKey.length - 4) : 'EMPTY'}" (length: ${this.apiKey?.length ?? 0})`);
   }
 
-  setInterviewMode(mode: InterviewMode) {
-    this.interviewMode = mode;
-  }
-
-  getInterviewMode(): InterviewMode {
-    return this.interviewMode;
-  }
-
-  setProblemContext(problem: ProblemContext) {
-    this.problemContext = problem;
-    console.log(`📋 Problem context set: ${problem.title}`);
+  /** Mark that the interview is ending (called before disconnect to prevent 1008 retry) */
+  markInterviewEnding() {
+    console.log("🏁 Interview marked as ending - will ignore 1008 errors");
+    this.isInterviewEnding = true;
   }
 
   setSystemDesignTopic(topicId: string) {
@@ -135,18 +103,19 @@ export class GeminiLiveClient {
     }
   }
 
-  /** Mark that the interview is ending (called before disconnect to prevent 1008 retry) */
-  markInterviewEnding() {
-    console.log("🏁 Interview marked as ending - will ignore 1008 errors");
-    this.isInterviewEnding = true;
+  setReconnectionContext(context: string) {
+    this.reconnectionContext = context;
+    this.isReconnection = true;
+    console.log(`🔄 Reconnection context set (${context.length} chars)`);
   }
 
   async connect(isRetry = false) {
     if (!isRetry) {
       this.retryAttempts = 0;
+      this.isInterviewEnding = false;
     }
 
-    console.log(`🚀 Starting Gemini Live connection... ${isRetry ? `(retry ${this.retryAttempts}/${MAX_RETRY_ATTEMPTS})` : ''}`);
+    console.log(`🚀 Starting System Design connection... ${isRetry ? `(retry ${this.retryAttempts}/${MAX_RETRY_ATTEMPTS})` : ''}`);
     this.onStatusChange('connecting');
 
     try {
@@ -165,40 +134,29 @@ export class GeminiLiveClient {
         // permissions.query may not be supported, continue anyway
       }
 
-      // Build system instruction based on interview mode
-      let systemInstruction: string;
-      if (this.interviewMode === 'system-design' && this.systemDesignTopic) {
-        systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
-      } else {
-        // For non-system-design modes, use the standard interviewer prompt
-        const mode = this.interviewMode === 'system-design' ? 'real' : this.interviewMode;
-        systemInstruction = getSystemInstruction(mode);
-        if (this.problemContext) {
-          systemInstruction += this.buildProblemSection();
-        }
+      // Build system instruction for the topic
+      if (!this.systemDesignTopic) {
+        throw new Error("No system design topic selected");
       }
 
-      // Construct WebSocket URL with API key directly in query string
+      const systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
+
+      // Construct WebSocket URL with API key in query string
       const wsUrl = `${WS_BASE_URL}/ws/google.ai.generativelanguage.${API_VERSION}.GenerativeService.BidiGenerateContent?key=${this.apiKey}`;
 
-      // Debug: check if key is properly attached (masked)
-      const maskedKey = this.apiKey.substring(0, 8) + '...' + this.apiKey.substring(this.apiKey.length - 4);
-      console.log(`🔗 WebSocket URL constructed with key: ${maskedKey} (length: ${this.apiKey.length})`);
-
-      console.log(`🎙️ Connecting: ${this.interviewMode} mode, model: ${MODEL}`);
-      console.log(`📋 Problem: ${this.problemContext?.title || 'none'}`);
+      console.log(`📐 Starting system design interview: ${this.systemDesignTopic.title}`);
       console.log(`🔗 WebSocket URL: ${wsUrl.replace(this.apiKey, this.apiKey.substring(0, 8) + '...')}`);
 
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log("🎙️ Gemini Live WebSocket Connected!");
+        console.log("🎙️ System Design WebSocket Connected!");
         this._isConnected = true;
         this.retryAttempts = 0;
         this.isSetupComplete = false;
         this.onStatusChange('connected');
 
-        // Send setup message in SDK format
+        // Send setup message
         this.sendSetupMessage(systemInstruction);
       };
 
@@ -211,7 +169,10 @@ export class GeminiLiveClient {
       };
 
       this.ws.onclose = (event: CloseEvent) => {
-        console.log("🔌 Gemini Live WebSocket Closed:", event.code, event.reason);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'system-design-live-client.ts:onclose',message:'WebSocket closed',data:{code:event.code,reason:event.reason,wasClean:event.wasClean},timestamp:Date.now(),hypothesisId:'D2'})}).catch(()=>{});
+        // #endregion
+        console.log("🔌 System Design WebSocket Closed:", event.code, event.reason);
         this._isConnected = false;
         this.ws = null;
         this.handleClose(event);
@@ -229,9 +190,8 @@ export class GeminiLiveClient {
   private sendSetupMessage(systemInstruction: string) {
     if (!this.ws) return;
 
-    // Build setup message in the exact format the @google/genai SDK uses
-    // (reverse-engineered from liveConnectParametersToMldev)
-    const setupMessage = {
+    const tools = this.useFallbackTools ? SYSTEM_DESIGN_TOOLS_FALLBACK : SYSTEM_DESIGN_TOOLS;
+    const setupMessage: any = {
       setup: {
         model: MODEL,
         generationConfig: {
@@ -248,40 +208,37 @@ export class GeminiLiveClient {
           role: "user",
           parts: [{ text: systemInstruction }]
         },
-        tools: (this.interviewMode === 'system-design' && !this.useFallbackTools) ? SYSTEM_DESIGN_TOOLS : (this.useFallbackTools ? SYSTEM_DESIGN_TOOLS_FALLBACK : INTERVIEW_TOOLS),
+        // Only include tools field if we have tools to send
+        ...(tools.length > 0 ? { tools } : {}),
         realtimeInputConfig: {
-          // Ensure user speech during interruption is included in context
-          // so the model responds to what the user said, not resuming its
-          // previous train of thought
           activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
           turnCoverage: "TURN_INCLUDES_ALL_INPUT",
           automaticActivityDetection: {
             disabled: false,
-            // High sensitivity detects interruptions faster
             startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
-            // Lower end sensitivity lets user pause mid-sentence without
-            // the model jumping in
             endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
-            // Include a small audio buffer before detected speech start
             prefixPaddingMs: 20,
-            // Wait 700ms of silence before considering speech finished
-            // (longer than default to let user complete thoughts after interrupting)
             silenceDurationMs: 700
           }
         },
-        // Enable transcription of user's voice input so the model has
-        // text context of what was said, especially during interruptions
         inputAudioTranscription: {},
-        // Enable transcription of model's own audio output
         outputAudioTranscription: {}
       }
     };
 
-    console.log("📤 Sending setup message...");
-    this.ws.send(JSON.stringify(setupMessage));
+    // #region agent log
+    const setupStr = JSON.stringify(setupMessage);
+    const toolInfo = setupMessage.setup.tools?.[0];
+    fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'system-design-live-client.ts:sendSetupMessage',message:'Setup message being sent',data:{setupLength:setupStr.length,toolCount:toolInfo?.functionDeclarations?.length || 0,toolNames:toolInfo?.functionDeclarations?.map((f:any)=>f.name) || [],hasTools:!!setupMessage.setup.tools,useFallback:this.useFallbackTools,model:setupMessage.setup.model,promptLength:setupMessage.setup.systemInstruction?.parts?.[0]?.text?.length,setupPreview:setupStr.substring(0,2000)},timestamp:Date.now(),hypothesisId:'D2'})}).catch(()=>{});
+    // #endregion
+    console.log(`📤 Sending setup message for system design... (useFallback=${this.useFallbackTools}, tools=${setupMessage.setup.tools ? `${toolInfo?.functionDeclarations?.length || 0} tools` : 'none'})`);
+    this.ws.send(setupStr);
   }
 
   disconnect() {
+    console.log("🔌 Disconnect called - setting interview ending flag");
+    this.isInterviewEnding = true;
+    
     if (this.retryTimeoutId) {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
@@ -319,40 +276,8 @@ export class GeminiLiveClient {
     }));
   }
 
-  sendCodeContext(code: string, silent: boolean = true) {
-    if (!this.ws || !this._isConnected) {
-      return;
-    }
-
-    const truncatedCode = code.length > 10000
-      ? code.substring(0, 10000) + "\n... [code truncated]"
-      : code;
-
-    const contextMessage = silent
-      ? `[CONTEXT UPDATE - Candidate's current code in editor]\n\`\`\`\n${truncatedCode}\n\`\`\`\n[End of code update. DO NOT speak right now - the candidate may still be typing. Only comment if they address you directly or have clearly paused for a long time. When you do comment, keep it brief and ask about their approach rather than pointing out issues.]`
-      : `Here's my current code:\n\`\`\`\n${truncatedCode}\n\`\`\``;
-
-    console.log("📝 Sending code context to Gemini (length:", code.length, ")");
-    this.ws.send(JSON.stringify({
-      clientContent: {
-        turns: [{ role: "user", parts: [{ text: contextMessage }] }],
-        turnComplete: true,
-      }
-    }));
-  }
-
   isConnected(): boolean {
     return this._isConnected && this.ws !== null;
-  }
-
-  toggleMicMute(): boolean {
-    this.micMuted = !this.micMuted;
-    console.log(`🎤 Microphone ${this.micMuted ? 'muted' : 'unmuted'}`);
-    return this.micMuted;
-  }
-
-  isMicMuted(): boolean {
-    return this.micMuted;
   }
 
   promptToSpeak(context?: string) {
@@ -372,6 +297,16 @@ export class GeminiLiveClient {
         turnComplete: true,
       }
     }));
+  }
+
+  toggleMicMute() {
+    this.isMicMuted = !this.isMicMuted;
+    console.log(`🎤 Microphone ${this.isMicMuted ? 'muted' : 'unmuted'}`);
+    return this.isMicMuted;
+  }
+
+  isMicrophoneMuted(): boolean {
+    return this.isMicMuted;
   }
 
   getTimeSinceLastResponse(): number {
@@ -413,13 +348,15 @@ export class GeminiLiveClient {
 
   private handleRawMessage(event: MessageEvent) {
     this.lastResponseTime = Date.now();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'system-design-live-client.ts:handleRawMessage',message:'Raw WS message',data:{dataType:typeof event.data,isBlob:event.data instanceof Blob,dataPreview:typeof event.data==='string'?event.data.substring(0,200):'(not string)'},timestamp:Date.now(),hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
 
     let msg: any;
     try {
       if (typeof event.data === 'string') {
         msg = JSON.parse(event.data);
       } else if (event.data instanceof Blob) {
-        // Handle Blob data - read it as text then parse
         event.data.text().then(text => {
           try {
             const blobMsg = JSON.parse(text);
@@ -442,21 +379,32 @@ export class GeminiLiveClient {
   }
 
   private processServerMessage(msg: any) {
+    // #region agent log
+    const msgKeys = Object.keys(msg);
+    fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'system-design-live-client.ts:processServerMessage',message:'Server message received',data:{msgKeys,hasSetupComplete:msg.setupComplete!==undefined,hasServerContent:!!msg.serverContent,hasToolCall:!!msg.toolCall,preview:JSON.stringify(msg).substring(0,300)},timestamp:Date.now(),hypothesisId:'G'})}).catch(()=>{});
+    // #endregion
+    
     // Handle setup complete - start audio input
     if (msg.setupComplete !== undefined) {
-      console.log("✅ Gemini Live setup complete - starting audio input...");
+      console.log("✅ System Design setup complete - starting audio input...");
       this.isSetupComplete = true;
       this.startAudioInput();
       this.onSetupComplete();
+
+      // Inject reconnection context if this is a reconnection
+      if (this.isReconnection && this.reconnectionContext) {
+        console.log("🔄 Injecting context recovery message...");
+        setTimeout(() => {
+          if (this.reconnectionContext) {
+            this.sendText(this.reconnectionContext);
+            this.reconnectionContext = null;
+          }
+        }, 500);
+      }
     }
 
     // Handle server content (audio/text/interruption/turnComplete)
     if (msg.serverContent) {
-      // Debug: log all serverContent keys to find output transcription
-      if (Object.keys(msg.serverContent).length > 0) {
-        console.log('🔍 serverContent keys:', Object.keys(msg.serverContent));
-      }
-
       const wasInterrupted = !!msg.serverContent.interrupted;
 
       if (wasInterrupted) {
@@ -465,10 +413,6 @@ export class GeminiLiveClient {
         this.pendingUserInput = true;
         this.onInterrupted();
 
-        // Start a timer: if the model doesn't respond after the user
-        // finishes speaking, nudge it to reply. This handles the case
-        // where Gemini's VAD detects the interruption but the model
-        // never generates a follow-up response.
         if (this.responseCheckTimeoutId) {
           clearTimeout(this.responseCheckTimeoutId);
         }
@@ -477,17 +421,12 @@ export class GeminiLiveClient {
           if (this.pendingUserInput && this._isConnected && this.ws) {
             console.log("⚠️ No model response after interruption - prompting to speak");
             this.onNoResponse();
-            // Use interruption-aware prompt so model responds to what the
-            // user said rather than resuming its previous train of thought
             this.promptToSpeak("[IMPORTANT: The candidate just interrupted you. Your previous response has been CANCELLED - do NOT continue it. Listen to what the candidate said and respond ONLY to that. If you didn't catch what they said, ask: 'Sorry, could you repeat that?']");
           }
         }, POST_INTERRUPT_TIMEOUT_MS);
       }
 
       if (msg.serverContent.turnComplete) {
-        // When turnComplete arrives alongside interrupted, it's the
-        // cancelled model turn ending - NOT a response to the user.
-        // Don't clear the pending state or nudge timer in that case.
         if (!wasInterrupted) {
           console.log("✅ Model turn complete");
           this.pendingUserInput = false;
@@ -528,28 +467,12 @@ export class GeminiLiveClient {
           }
           if (part.text) {
             hasTextResponse = true;
-            // Store text but don't send to onMessage yet
-            // We'll only use text that accompanies audio (actual speech)
+            this.onMessage(part.text);
           }
         }
 
-        // Only capture text responses that have audio (actual speech)
-        // Text-only responses (audio=false, text=true) are internal reasoning
         if (hasAudioResponse || hasTextResponse) {
           console.log(`📤 Model response: audio=${hasAudioResponse}, text=${hasTextResponse}`);
-
-          if (hasTextResponse && !hasAudioResponse) {
-            console.warn('⚠️ Ignoring text-only response (internal reasoning)');
-          }
-        }
-
-        // Capture text from parts that have audio
-        if (hasAudioResponse) {
-          for (const part of parts) {
-            if (part.text) {
-              this.onMessage(part.text);
-            }
-          }
         }
       }
     }
@@ -562,13 +485,16 @@ export class GeminiLiveClient {
 
   private async handleToolCall(toolCall: any) {
     const functionCalls = toolCall.functionCalls || [];
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'system-design-live-client.ts:handleToolCall',message:'Tool call received from Gemini',data:{callCount:functionCalls.length,calls:functionCalls.map((f:any)=>({name:f.name,id:f.id,argsKeys:Object.keys(f.args||{})}))},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     console.log("🛠️ Tool Call Received:", functionCalls.map((f: any) => ({ name: f.name, id: f.id })));
 
     try {
       const responses = await Promise.race([
         this.onToolsCall(functionCalls),
         new Promise<any[]>((_, reject) =>
-          setTimeout(() => reject(new Error("Tool execution timeout")), 30000)
+          setTimeout(() => reject(new Error("Tool execution timeout")), 10000)
         )
       ]);
 
@@ -618,15 +544,24 @@ export class GeminiLiveClient {
           : "Protocol error. Check API configuration.";
         break;
       case 1008:
-        // If system design mode failed with diagram tools, retry with fallback
-        if (this.interviewMode === 'system-design' && !this.useFallbackTools) {
-          console.warn("⚠️ System design tools rejected with 1008 - retrying with fallback tools");
+        if (this.isInterviewEnding) {
+          console.log("✅ Connection closed gracefully during interview end (1008 is expected)");
+          this.onStatusChange('disconnected');
+          this.stopAudio();
+          return;
+        }
+
+        // If not using fallback tools yet, try with fallback on 1008
+        if (!this.useFallbackTools && this.retryAttempts === 0) {
+          console.log("⚠️ Diagram tools rejected with 1008 - retrying with fallback tools (voice-only)");
           this.useFallbackTools = true;
           this.retryAttempts = 0; // Reset retry counter for fallback attempt
           shouldRetry = true;
           errorMessage = ""; // Don't show error, we're retrying
         } else {
-          errorMessage = "API key rejected or policy violation. Try regenerating your API key.";
+          errorMessage = event.reason
+            ? `Policy violation: ${event.reason}`
+            : "Tools not supported. Please check your Gemini API configuration.";
         }
         break;
       case 1011:
@@ -659,48 +594,6 @@ export class GeminiLiveClient {
       this.onStatusChange('disconnected');
     }
     this.stopAudio();
-  }
-
-  private buildProblemSection(): string {
-    if (!this.problemContext) return '';
-    const p = this.problemContext;
-    return `
-
-## CURRENT INTERVIEW PROBLEM
-
-**Title:** ${p.title}
-**Difficulty:** ${p.difficulty}
-${p.companyName ? `**Company Style:** ${p.companyName}` : ''}
-${p.tags ? `**Tags:** ${p.tags.join(', ')}` : ''}
-
-**Problem Description:**
-${p.description}
-
-**Examples (YOU MUST walk through at least one example with the candidate):**
-${p.examples.map((ex, i) => `
-Example ${i + 1}:
-- Input: ${ex.input}
-- Output: ${ex.output}${ex.explanation ? `
-- Explanation: ${ex.explanation}` : ''}`).join('\n')}
-
-**Constraints (MENTION these to the candidate):**
-${p.constraints.map(c => `- ${c}`).join('\n')}
-
-**Function to Implement:** \`${p.functionName}\`
-${p.starterCode ? `
-**Starter Code (already in the candidate's editor):**
-\`\`\`
-${p.starterCode}
-\`\`\`` : ''}
-
----
-
-**START NOW:** Greet the candidate warmly (e.g., "Hey! I'm Alexis, nice to meet you!"), then:
-1. Explain the problem in your own words
-2. Walk through at least ONE example step by step (e.g., "So for example, if the input is [2,7,11,15] and target is 9, we'd return [0,1] because 2+7=9")
-3. Mention the key constraints (e.g., "There's always exactly one solution" or "The array can be up to 10^4 elements")
-4. Ask "Does that make sense? Any questions before you start coding?"
-`;
   }
 
   // --- Audio Input ---
@@ -756,14 +649,14 @@ ${p.starterCode}
 
       processor.onaudioprocess = (e) => {
         if (!this.ws || !this._isConnected || !this.isSetupComplete) return;
-
-        const inputData = e.inputBuffer.getChannelData(0);
-
-        // If microphone is muted, don't process or send audio
-        // (also don't show volume to avoid triggering UI interruption logic)
-        if (this.micMuted) {
+        
+        // Skip sending audio if mic is muted
+        if (this.isMicMuted) {
+          this.onVolume(0);
           return;
         }
+
+        const inputData = e.inputBuffer.getChannelData(0);
 
         // Calculate input volume for visualization
         let sum = 0;
@@ -776,7 +669,7 @@ ${p.starterCode}
           this.onVolume(inputVolume);
         }
 
-        // Convert to Int16 PCM Base64 and send in SDK format
+        // Convert to Int16 PCM Base64 and send
         const pcmData = this.float32ToInt16Base64(inputData);
 
         try {

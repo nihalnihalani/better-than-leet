@@ -132,13 +132,17 @@ interface InterviewState {
   toggleWizardMode: () => void;
 
   // Practice Interview Mode
-  interviewMode: 'real' | 'practice';
-  setInterviewMode: (mode: 'real' | 'practice') => void;
+  interviewMode: 'real' | 'practice' | 'system-design';
+  setInterviewMode: (mode: 'real' | 'practice' | 'system-design') => void;
   selectedCompanyId: string | null;
   setSelectedCompanyId: (id: string | null) => void;
   practiceHistory: PracticeSession[];
   addPracticeSession: (session: PracticeSession) => void;
   clearPracticeHistory: () => void;
+
+  // System Design (minimal - just for routing)
+  selectedTopicId: string | null;
+  setSelectedTopicId: (id: string | null) => void;
 
   // Custom Problems (LeetCode import / manual)
   customProblems: CustomProblem[];
@@ -262,6 +266,10 @@ export const useInterviewStore = create<InterviewState>()(
       })),
       clearPracticeHistory: () => set({ practiceHistory: [] }),
 
+      // System Design (minimal - just for routing)
+      selectedTopicId: null,
+      setSelectedTopicId: (selectedTopicId) => set({ selectedTopicId }),
+
       // Custom Problems
       customProblems: [],
       addCustomProblem: (problem) => set((state) => ({
@@ -347,7 +355,8 @@ export const useInterviewStore = create<InterviewState>()(
         selectedCompanyId: state.selectedCompanyId, // Persist selected company for practice mode
         currentProblemId: state.currentProblemId, // Persist current problem
         practiceHistory: state.practiceHistory, // Persist practice history
-        customProblems: state.customProblems // Persist custom problems
+        customProblems: state.customProblems, // Persist custom problems
+        selectedTopicId: state.selectedTopicId, // Persist selected topic for system design routing
       }),
     }
   )
