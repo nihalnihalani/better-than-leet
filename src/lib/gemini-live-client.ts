@@ -235,9 +235,15 @@ export class GeminiLiveClient {
             endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
             // Include a small audio buffer before detected speech start
             prefixPaddingMs: 20,
-            // Wait 500ms of silence before considering speech finished
-            silenceDurationMs: 500
+            // Wait 700ms of silence before considering speech finished
+            // (longer than default to let user complete thoughts after interrupting)
+            silenceDurationMs: 700
           }
+        },
+        // Improves natural conversation handling and interruption awareness
+        enableAffectiveDialog: true,
+        proactivity: {
+          proactiveAudio: true
         }
       }
     };
