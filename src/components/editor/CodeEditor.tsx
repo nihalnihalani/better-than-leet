@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { editor } from 'monaco-editor';
-import { KeyMod, KeyCode } from 'monaco-editor';
+import type { Monaco } from '@monaco-editor/react';
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 import { useInterviewStore } from '@/lib/store';
@@ -54,7 +54,7 @@ export function CodeEditor({
   }, [addBlurEvent]);
 
   // Handle Monaco editor mount and attach paste event listener
-  const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor) => {
+  const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editorInstance;
 
     // Register Ctrl+Enter / Cmd+Enter to run code
@@ -62,7 +62,7 @@ export function CodeEditor({
       id: 'run-code',
       label: 'Run Code',
       keybindings: [
-        KeyMod.CtrlCmd | KeyCode.Enter,
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
       ],
       run: () => {
         const currentCode = editorInstance.getValue();

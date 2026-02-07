@@ -239,11 +239,6 @@ export class GeminiLiveClient {
             // (longer than default to let user complete thoughts after interrupting)
             silenceDurationMs: 700
           }
-        },
-        // Improves natural conversation handling and interruption awareness
-        enableAffectiveDialog: true,
-        proactivity: {
-          proactiveAudio: true
         }
       }
     };
