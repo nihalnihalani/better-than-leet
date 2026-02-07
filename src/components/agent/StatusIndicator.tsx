@@ -2,12 +2,14 @@ import { cn } from "@/lib/utils";
 
 export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "disconnecting" | "error";
 
-export function StatusIndicator({ status }: { status: ConnectionStatus | string }) {
+export function StatusIndicator({ status, isModelSpeaking }: { status: ConnectionStatus | string; isModelSpeaking?: boolean }) {
   const styles: Record<string, { color: string; dot: string; label: string }> = {
     connected: {
-      color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-      dot: "bg-emerald-500",
-      label: "Live"
+      color: isModelSpeaking
+        ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+        : "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      dot: isModelSpeaking ? "bg-purple-500" : "bg-emerald-500",
+      label: isModelSpeaking ? "Speaking..." : "Listening..."
     },
     connecting: {
       color: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",

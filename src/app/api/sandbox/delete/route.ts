@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { daytonaService } from '@/lib/daytona';
+// Note: No auth check on delete -- sendBeacon on page unload cannot set custom headers.
+// Delete is low-risk since it requires a valid workspace ID.
 
 export async function POST(req: NextRequest) {
     try {

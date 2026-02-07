@@ -31,6 +31,9 @@ const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
 
+// After an interruption, if no model response within this time, nudge the model
+const POST_INTERRUPT_TIMEOUT_MS = 7000;
+
 // Interview mode type
 export type InterviewMode = 'real' | 'practice';
 
@@ -94,6 +97,8 @@ export class GeminiLiveClient {
   public onTurnEnd: () => void = () => {};
   public onModelSpeaking: (isSpeaking: boolean) => void = () => {};
   public onNoResponse: () => void = () => {};
+  public onSetupComplete: () => void = () => {};
+  public onUserTranscript: (text: string) => void = () => {};
 
   constructor(private apiKey: string, mode: InterviewMode = 'real') {
     this.apiKey = apiKey.trim();
@@ -216,10 +221,30 @@ export class GeminiLiveClient {
         },
         tools: INTERVIEW_TOOLS,
         realtimeInputConfig: {
+          // Ensure user speech during interruption is included in context
+          // so the model responds to what the user said, not resuming its
+          // previous train of thought
+          activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+          turnCoverage: "TURN_INCLUDES_ALL_INPUT",
           automaticActivityDetection: {
-            disabled: false
+            disabled: false,
+            // High sensitivity detects interruptions faster
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
+            // Lower end sensitivity lets user pause mid-sentence without
+            // the model jumping in
+            endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+            // Include a small audio buffer before detected speech start
+            prefixPaddingMs: 20,
+            // Wait 700ms of silence before considering speech finished
+            // (longer than default to let user complete thoughts after interrupting)
+            silenceDurationMs: 700
           }
-        }
+        },
+        // Enable transcription of user's voice input so the model has
+        // text context of what was said, especially during interruptions
+        inputAudioTranscription: {},
+        // Enable transcription of model's own audio output
+        outputAudioTranscription: {}
       }
     };
 
@@ -275,7 +300,7 @@ export class GeminiLiveClient {
       : code;
 
     const contextMessage = silent
-      ? `[CONTEXT UPDATE - Candidate's current code in editor]\n\`\`\`\n${truncatedCode}\n\`\`\`\n[End of code - React naturally. If they seem stuck, offer guidance. If they're making progress, encourage them. Don't repeat back the entire code.]`
+      ? `[CONTEXT UPDATE - Candidate's current code in editor]\n\`\`\`\n${truncatedCode}\n\`\`\`\n[End of code update. DO NOT speak right now - the candidate may still be typing. Only comment if they address you directly or have clearly paused for a long time. When you do comment, keep it brief and ask about their approach rather than pointing out issues.]`
       : `Here's my current code:\n\`\`\`\n${truncatedCode}\n\`\`\``;
 
     console.log("📝 Sending code context to Gemini (length:", code.length, ")");
@@ -383,29 +408,70 @@ export class GeminiLiveClient {
       console.log("✅ Gemini Live setup complete - starting audio input...");
       this.isSetupComplete = true;
       this.startAudioInput();
+      this.onSetupComplete();
     }
 
     // Handle server content (audio/text/interruption/turnComplete)
     if (msg.serverContent) {
-      if (msg.serverContent.interrupted) {
+      const wasInterrupted = !!msg.serverContent.interrupted;
+
+      if (wasInterrupted) {
         console.log("🛑 Model interrupted by user");
         this.clearAudioQueue();
+        this.pendingUserInput = true;
         this.onInterrupted();
+
+        // Start a timer: if the model doesn't respond after the user
+        // finishes speaking, nudge it to reply. This handles the case
+        // where Gemini's VAD detects the interruption but the model
+        // never generates a follow-up response.
+        if (this.responseCheckTimeoutId) {
+          clearTimeout(this.responseCheckTimeoutId);
+        }
+        this.responseCheckTimeoutId = setTimeout(() => {
+          this.responseCheckTimeoutId = null;
+          if (this.pendingUserInput && this._isConnected && this.ws) {
+            console.log("⚠️ No model response after interruption - prompting to speak");
+            this.onNoResponse();
+            // Use interruption-aware prompt so model responds to what the
+            // user said rather than resuming its previous train of thought
+            this.promptToSpeak("[IMPORTANT: The candidate just interrupted you. Your previous response has been CANCELLED - do NOT continue it. Listen to what the candidate said and respond ONLY to that. If you didn't catch what they said, ask: 'Sorry, could you repeat that?']");
+          }
+        }, POST_INTERRUPT_TIMEOUT_MS);
       }
 
       if (msg.serverContent.turnComplete) {
-        console.log("✅ Model turn complete");
-        this.pendingUserInput = false;
+        // When turnComplete arrives alongside interrupted, it's the
+        // cancelled model turn ending - NOT a response to the user.
+        // Don't clear the pending state or nudge timer in that case.
+        if (!wasInterrupted) {
+          console.log("✅ Model turn complete");
+          this.pendingUserInput = false;
 
-        if (this.responseCheckTimeoutId) {
-          clearTimeout(this.responseCheckTimeoutId);
-          this.responseCheckTimeoutId = null;
+          if (this.responseCheckTimeoutId) {
+            clearTimeout(this.responseCheckTimeoutId);
+            this.responseCheckTimeoutId = null;
+          }
+        } else {
+          console.log("✅ Interrupted model turn ended (waiting for new response)");
         }
 
         this.onTurnEnd();
       }
 
+      // Handle user speech transcription from Gemini
+      if (msg.serverContent.inputTranscript) {
+        this.onUserTranscript(msg.serverContent.inputTranscript);
+      }
+
       if (msg.serverContent.modelTurn) {
+        // Model is responding - clear any pending nudge timer
+        this.pendingUserInput = false;
+        if (this.responseCheckTimeoutId) {
+          clearTimeout(this.responseCheckTimeoutId);
+          this.responseCheckTimeoutId = null;
+        }
+
         const parts = msg.serverContent.modelTurn.parts || [];
         let hasAudioResponse = false;
         let hasTextResponse = false;
@@ -519,9 +585,10 @@ export class GeminiLiveClient {
     if (errorMessage) {
       console.error("❌", errorMessage);
       this.onError(new Error(errorMessage));
+      this.onStatusChange('error');
+    } else {
+      this.onStatusChange('disconnected');
     }
-
-    this.onStatusChange('disconnected');
     this.stopAudio();
   }
 
@@ -540,21 +607,30 @@ ${p.tags ? `**Tags:** ${p.tags.join(', ')}` : ''}
 **Problem Description:**
 ${p.description}
 
-**Examples:**
+**Examples (YOU MUST walk through at least one example with the candidate):**
 ${p.examples.map((ex, i) => `
 Example ${i + 1}:
 - Input: ${ex.input}
 - Output: ${ex.output}${ex.explanation ? `
 - Explanation: ${ex.explanation}` : ''}`).join('\n')}
 
-**Constraints:**
+**Constraints (MENTION these to the candidate):**
 ${p.constraints.map(c => `- ${c}`).join('\n')}
 
 **Function to Implement:** \`${p.functionName}\`
+${p.starterCode ? `
+**Starter Code (already in the candidate's editor):**
+\`\`\`
+${p.starterCode}
+\`\`\`` : ''}
 
 ---
 
-**START NOW:** Greet the candidate warmly (e.g., "Hey! I'm Alexis, nice to meet you!"), then present this problem in your own words. Don't read verbatim. Ask if they have questions before coding.
+**START NOW:** Greet the candidate warmly (e.g., "Hey! I'm Alexis, nice to meet you!"), then:
+1. Explain the problem in your own words
+2. Walk through at least ONE example step by step (e.g., "So for example, if the input is [2,7,11,15] and target is 9, we'd return [0,1] because 2+7=9")
+3. Mention the key constraints (e.g., "There's always exactly one solution" or "The array can be up to 10^4 elements")
+4. Ask "Does that make sense? Any questions before you start coding?"
 `;
   }
 
@@ -682,6 +758,8 @@ ${p.constraints.map(c => `- ${c}`).join('\n')}
       // Nodes may already be disconnected
     }
 
+    this.clearAudioQueue();
+
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
       this.mediaStream = null;
@@ -694,7 +772,6 @@ ${p.constraints.map(c => `- ${c}`).join('\n')}
       this.outputAudioContext.close().catch(() => {});
       this.outputAudioContext = null;
     }
-    this.clearAudioQueue();
   }
 
   // --- Audio Output ---

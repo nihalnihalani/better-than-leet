@@ -160,7 +160,7 @@ export function ProblemDescription() {
                     </Button>
                 </CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 overflow-auto prose prose-invert prose-sm max-w-none p-4">
+            <CardContent className="flex-1 overflow-auto prose dark:prose-invert prose-sm max-w-none p-4">
                 <ReactMarkdown>{problem.description}</ReactMarkdown>
 
                 <div className="mt-6">
