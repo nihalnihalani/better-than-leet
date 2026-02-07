@@ -80,8 +80,8 @@ export function TranscriptPanel() {
                 key={gi}
                 className={`text-xs rounded-lg px-3 py-2 ${
                   group.speaker === 'agent'
-                    ? 'bg-purple-500/10 text-purple-200 border border-purple-500/20'
-                    : 'bg-blue-500/10 text-blue-200 border border-blue-500/20'
+                    ? 'bg-purple-500/10 text-purple-800 dark:text-purple-200 border border-purple-500/20'
+                    : 'bg-blue-500/10 text-blue-800 dark:text-blue-200 border border-blue-500/20'
                 }`}
               >
                 <div className="flex items-center gap-1.5 mb-1 font-medium opacity-80">

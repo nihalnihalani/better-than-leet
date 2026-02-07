@@ -122,7 +122,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-[#0c0c0c] border border-gray-800">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-background border border-border">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold flex items-center gap-3">
             <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
@@ -137,7 +137,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
               </span>
             )}
           </DialogTitle>
-          <DialogDescription className="text-gray-400">
+          <DialogDescription className="text-muted-foreground">
             AI-powered comprehensive evaluation of candidate performance.
           </DialogDescription>
         </DialogHeader>
@@ -149,8 +149,8 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
               <Loader2 className="w-16 h-16 animate-spin text-blue-400 relative z-10" />
             </div>
             <div className="text-center space-y-2">
-              <p className="text-lg font-medium text-gray-200">Generating Analysis...</p>
-              <p className="text-sm text-gray-500">Processing transcript, code quality, and behavioral signals.</p>
+              <p className="text-lg font-medium text-foreground">Generating Analysis...</p>
+              <p className="text-sm text-muted-foreground">Processing transcript, code quality, and behavioral signals.</p>
             </div>
           </div>
         ) : error ? (
@@ -159,7 +159,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
               <AlertTriangle className="w-8 h-8 text-red-500" />
             </div>
             <h3 className="text-lg font-semibold text-red-400">Generation Failed</h3>
-            <p className="text-gray-400 max-w-md mx-auto">{error}</p>
+            <p className="text-muted-foreground max-w-md mx-auto">{error}</p>
             <Button onClick={generateReport} variant="outline" className="mt-4">
               Try Again
             </Button>
@@ -168,19 +168,19 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
 
             {/* Executive Summary - Full Width */}
-            <Card className="lg:col-span-2 border-l-4 border-l-blue-500 bg-[#151515]">
+            <Card className="lg:col-span-2 border-l-4 border-l-blue-500 bg-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-blue-400">
                   <Brain className="w-5 h-5" /> Executive Summary
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-gray-300 leading-relaxed">
+              <CardContent className="text-foreground/80 leading-relaxed">
                 {aiReport.executiveSummary}
               </CardContent>
             </Card>
 
             {/* Technical Evaluation */}
-            <Card className="border-l-4 border-l-purple-500 bg-[#151515]">
+            <Card className="border-l-4 border-l-purple-500 bg-card">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-purple-400">
                   <Code className="w-5 h-5" /> Technical Skills
@@ -190,16 +190,16 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
                 </span>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-gray-400">{aiReport.technicalEvaluation.summary}</p>
+                <p className="text-sm text-muted-foreground">{aiReport.technicalEvaluation.summary}</p>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">Strengths</h4>
-                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
                     {aiReport.technicalEvaluation.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
                   </ul>
                 </div>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">Weaknesses</h4>
-                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
                     {aiReport.technicalEvaluation.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
                   </ul>
                 </div>
@@ -207,7 +207,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
             </Card>
 
             {/* Communication Evaluation */}
-            <Card className="border-l-4 border-l-yellow-500 bg-[#151515]">
+            <Card className="border-l-4 border-l-yellow-500 bg-card">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-yellow-400">
                   <span className="text-xl">💬</span> Communication
@@ -217,16 +217,16 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
                 </span>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-gray-400">{aiReport.communicationEvaluation.summary}</p>
+                <p className="text-sm text-muted-foreground">{aiReport.communicationEvaluation.summary}</p>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">Strengths</h4>
-                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
                     {aiReport.communicationEvaluation.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
                   </ul>
                 </div>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">Areas to Improve</h4>
-                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
                     {aiReport.communicationEvaluation.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
                   </ul>
                 </div>
@@ -234,7 +234,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
             </Card>
 
             {/* Problem Solving Evaluation */}
-            <Card className="border-l-4 border-l-cyan-500 bg-[#151515]">
+            <Card className="border-l-4 border-l-cyan-500 bg-card">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-cyan-400">
                   <span className="text-xl">🧩</span> Problem Solving
@@ -244,16 +244,16 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
                 </span>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-gray-400">{aiReport.problemSolvingEvaluation.summary}</p>
+                <p className="text-sm text-muted-foreground">{aiReport.problemSolvingEvaluation.summary}</p>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-green-400 uppercase tracking-wider">Strengths</h4>
-                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
                     {aiReport.problemSolvingEvaluation.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
                   </ul>
                 </div>
                 <div className="space-y-2">
                   <h4 className="text-xs font-semibold text-red-400 uppercase tracking-wider">Areas to Improve</h4>
-                  <ul className="list-disc list-inside text-sm text-gray-300 space-y-1">
+                  <ul className="list-disc list-inside text-sm text-foreground/80 space-y-1">
                     {aiReport.problemSolvingEvaluation.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
                   </ul>
                 </div>
@@ -261,9 +261,9 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
             </Card>
 
             {/* Integrity & Metrics */}
-            <Card className={`border-l-4 ${isIntegrityGood ? "border-l-green-500" : "border-l-red-500"} bg-[#151515]`}>
+            <Card className={`border-l-4 ${isIntegrityGood ? "border-l-green-500" : "border-l-red-500"} bg-card`}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-gray-200">
+                <CardTitle className="flex items-center gap-2 text-foreground">
                   <Shield className={`w-5 h-5 ${isIntegrityGood ? "text-green-500" : "text-red-500"}`} />
                   Integrity & Metrics
                 </CardTitle>
@@ -274,7 +274,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
                     <div className={`text-2xl font-bold ${isIntegrityGood ? "text-green-400" : "text-red-400"}`}>
                       {integrityScore}%
                     </div>
-                    <div className="text-xs text-gray-500 uppercase mt-1">Trust Score</div>
+                    <div className="text-xs text-muted-foreground uppercase mt-1">Trust Score</div>
                   </div>
                   <div className="text-center p-3 rounded-lg bg-black/40">
                     <div className="text-2xl font-bold text-blue-400">
@@ -282,28 +282,28 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
                         ? `${testResults[testResults.length - 1].testsPassed}/${testResults[testResults.length - 1].testsTotal}`
                         : "-"}
                     </div>
-                    <div className="text-xs text-gray-500 uppercase mt-1">Tests Passed</div>
+                    <div className="text-xs text-muted-foreground uppercase mt-1">Tests Passed</div>
                   </div>
                 </div>
 
                 {/* Detailed Integrity Breakdown */}
-                <div className="space-y-2 pt-2 border-t border-gray-800">
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Integrity Details</h4>
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Integrity Details</h4>
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Tab Switches:</span>
+                      <span className="text-muted-foreground">Tab Switches:</span>
                       <span className={`font-mono ${integrity.blurCount > 5 ? "text-red-400" : integrity.blurCount > 2 ? "text-yellow-400" : "text-green-400"}`}>
                         {integrity.blurCount} {integrity.blurCount > 5 ? "🔴" : integrity.blurCount > 2 ? "🟡" : "🟢"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Paste Events:</span>
+                      <span className="text-muted-foreground">Paste Events:</span>
                       <span className={`font-mono ${integrity.pasteCount > 3 ? "text-yellow-400" : "text-green-400"}`}>
                         {integrity.pasteCount} {integrity.pasteCount > 3 ? "🟡" : "🟢"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-400">Large Pastes (&gt;100 chars):</span>
+                      <span className="text-muted-foreground">Large Pastes (&gt;100 chars):</span>
                       <span className={`font-mono ${integrity.largePasteEvents.length > 0 ? "text-red-400" : "text-green-400"}`}>
                         {integrity.largePasteEvents.length} {integrity.largePasteEvents.length > 0 ? "🔴" : "🟢"}
                       </span>
@@ -314,13 +314,13 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
             </Card>
 
             {/* Final Verdict & Feedback */}
-            <Card className="lg:col-span-2 border-t-4 border-t-pink-500 bg-gradient-to-b from-[#1a1015] to-[#151515]">
+            <Card className="lg:col-span-2 border-t-4 border-t-pink-500 bg-gradient-to-b from-pink-950/20 to-card">
               <CardHeader>
                 <CardTitle className="text-pink-400 flex items-center gap-2">
                   🎯 Final Feedback
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-gray-300 italic">
+              <CardContent className="text-foreground/80 italic">
                 "{aiReport.finalFeedback}"
               </CardContent>
             </Card>
@@ -328,7 +328,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
           </div>
         ) : null}
 
-        <div className="flex justify-end gap-2 mt-6 border-t border-gray-800 pt-6 no-print">
+        <div className="flex justify-end gap-2 mt-6 border-t border-border pt-6 no-print">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           <Button onClick={() => window.print()}>
             <FileDown className="w-4 h-4 mr-2" />
