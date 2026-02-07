@@ -2,6 +2,17 @@
 
 import React from 'react';
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Play, Wand2, FileDown } from "lucide-react";
 
 interface ControlsProps {
@@ -47,15 +58,35 @@ export function Controls({
         </Button>
       )}
 
-      <Button
-        variant="destructive"
-        className="w-full mt-4"
-        onClick={onEndInterview}
-        aria-label="End interview and download report"
-      >
-        <FileDown className="w-4 h-4 mr-2" aria-hidden="true" />
-        End Interview
-      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="destructive"
+            className="w-full mt-4"
+            aria-label="End interview and download report"
+          >
+            <FileDown className="w-4 h-4 mr-2" aria-hidden="true" />
+            End Interview
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to end the interview?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your interview will be evaluated and a report will be generated. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onEndInterview}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              End Interview
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

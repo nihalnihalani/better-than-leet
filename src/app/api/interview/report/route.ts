@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateInterviewReport, InterviewReportData } from '@/lib/gemini';
 import { rateLimiter, getRateLimitConfig } from '@/lib/rate-limiter';
+import { validateSession } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
+    // Session auth check
+    if (!validateSession(req)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Rate limiting
     const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown';
     const config = getRateLimitConfig('/api/interview/report');

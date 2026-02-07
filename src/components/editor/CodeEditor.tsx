@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import type { editor } from 'monaco-editor';
+import type { Monaco } from '@monaco-editor/react';
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 import { useInterviewStore } from '@/lib/store';
@@ -29,7 +30,13 @@ export function CodeEditor({
 }: CodeEditorProps) {
   const [code, setCode] = useState(initialCode);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const onRunRef = useRef(onRun);
   const { addBlurEvent, addPasteEvent } = useInterviewStore();
+
+  // Keep onRun ref current to avoid stale closure in Monaco action
+  useEffect(() => {
+    onRunRef.current = onRun;
+  }, [onRun]);
 
   // Tab switching detection via visibility change
   useEffect(() => {
@@ -47,8 +54,21 @@ export function CodeEditor({
   }, [addBlurEvent]);
 
   // Handle Monaco editor mount and attach paste event listener
-  const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor) => {
+  const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     editorRef.current = editorInstance;
+
+    // Register Ctrl+Enter / Cmd+Enter to run code
+    editorInstance.addAction({
+      id: 'run-code',
+      label: 'Run Code',
+      keybindings: [
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+      ],
+      run: () => {
+        const currentCode = editorInstance.getValue();
+        onRunRef.current?.(currentCode);
+      },
+    });
 
     // Use Monaco's native onDidPaste event for accurate paste detection
     editorInstance.onDidPaste((e) => {
@@ -79,25 +99,30 @@ export function CodeEditor({
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-md overflow-hidden bg-[#1e1e1e]">
-      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333]">
-        <span className="text-sm text-gray-400 font-mono">{language}</span>
-        <Button 
-          size="sm" 
-          variant="secondary" 
-          onClick={handleRun}
-          disabled={isRunning}
-          className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white border-0"
-        >
-          <Play className="w-3 h-3" fill="currentColor" />
-          {isRunning ? "Running..." : "Run"}
-        </Button>
+    <div className="flex flex-col h-full border rounded-md overflow-hidden bg-card">
+      <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
+        <span className="text-sm text-muted-foreground font-mono">{language}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter to run
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleRun}
+            disabled={isRunning}
+            className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white border-0"
+          >
+            <Play className="w-3 h-3" fill="currentColor" />
+            {isRunning ? "Running..." : "Run"}
+          </Button>
+        </div>
       </div>
       <div className="flex-1">
         <Editor
           height="100%"
-          defaultLanguage={language}
-          defaultValue={initialCode}
+          language={language}
+          value={initialCode}
           theme="vs-dark"
           onChange={handleEditorChange}
           onMount={handleEditorMount}

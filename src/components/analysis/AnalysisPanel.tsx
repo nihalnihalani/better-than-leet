@@ -17,7 +17,7 @@ interface AnalysisResult {
 export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | null, isLoading: boolean }) {
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-gray-400 animate-pulse">
+      <div className="flex flex-col items-center justify-center p-8 text-muted-foreground animate-pulse">
         <BrainCircuit className="w-8 h-8 mb-2 animate-spin-slow" />
         <p>Gemini is analyzing your code...</p>
       </div>
@@ -29,8 +29,8 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
   return (
     <div id="analysis-container" className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-4 rounded-lg bg-gray-800 border border-gray-700">
-          <div className="text-sm text-gray-400 mb-1">Quality Score</div>
+        <div className="p-4 rounded-lg bg-card border border-border">
+          <div className="text-sm text-muted-foreground mb-1">Quality Score</div>
           <div className={cn("text-2xl font-bold", 
             result.score >= 8 ? "text-green-500" : 
             result.score >= 5 ? "text-yellow-500" : "text-red-500"
@@ -38,8 +38,8 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
             {result.score}/10
           </div>
         </div>
-        <div className="p-4 rounded-lg bg-gray-800 border border-gray-700">
-            <div className="text-sm text-gray-400 mb-1">Security Score</div>
+        <div className="p-4 rounded-lg bg-card border border-border">
+            <div className="text-sm text-muted-foreground mb-1">Security Score</div>
             <div className={cn("text-2xl font-bold", 
               (result.security_score || 0) >= 9 ? "text-green-500" : 
               (result.security_score || 0) >= 6 ? "text-yellow-500" : "text-red-500"
@@ -47,8 +47,8 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
               {result.security_score !== undefined ? `${result.security_score}/10` : "N/A"}
             </div>
         </div>
-        <div className="col-span-2 p-4 rounded-lg bg-gray-800 border border-gray-700">
-          <div className="text-sm text-gray-400 mb-1">Time Complexity</div>
+        <div className="col-span-2 p-4 rounded-lg bg-card border border-border">
+          <div className="text-sm text-muted-foreground mb-1">Time Complexity</div>
           <div className="text-2xl font-bold text-blue-400">{result.complexity}</div>
         </div>
       </div>
@@ -69,7 +69,7 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
       )}
 
       <div className="space-y-2">
-        <h4 className="font-semibold text-gray-300 flex items-center gap-2">
+        <h4 className="font-semibold text-foreground/80 flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> Code Issues
         </h4>
         <ul className="space-y-2">
@@ -79,7 +79,7 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
             </li>
           ) : (
             result.issues.map((issue, i) => (
-              <li key={i} className="text-sm text-gray-300 bg-yellow-900/20 p-2 rounded border border-yellow-900/30">
+              <li key={i} className="text-sm text-foreground/80 bg-yellow-900/20 p-2 rounded border border-yellow-900/30">
                 • {issue}
               </li>
             ))
@@ -88,10 +88,10 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
       </div>
 
       <div className="space-y-2">
-        <h4 className="font-semibold text-gray-300 flex items-center gap-2">
+        <h4 className="font-semibold text-foreground/80 flex items-center gap-2">
           <BrainCircuit className="w-4 h-4" /> AI Reasoning
         </h4>
-        <div className="text-sm text-gray-400 bg-gray-900/50 p-3 rounded-lg border border-gray-800 italic">
+        <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border italic">
           "{result.reasoning_trace}"
         </div>
       </div>

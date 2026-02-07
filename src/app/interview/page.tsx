@@ -10,6 +10,7 @@ import { ConsolePanel } from "@/components/interview/ConsolePanel";
 import { Controls } from "@/components/interview/Controls";
 import { CodeEditor } from "@/components/editor/CodeEditor";
 import { InterviewAgent } from "@/components/agent/InterviewAgent";
+import { TranscriptPanel } from "@/components/agent/TranscriptPanel";
 import { useInterviewStore } from "@/lib/store";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -17,10 +18,16 @@ import { Logo } from "@/components/ui/Logo";
 import { InterviewReportDialog } from "@/components/interview/InterviewReportDialog";
 import { PracticeReportDialog } from "@/components/practice/PracticeReportDialog";
 import { WorkspaceProgressIndicator } from "@/components/workspace/WorkspaceProgressIndicator";
+import { Timer } from "@/components/interview/Timer";
 import { Shield, GraduationCap } from "lucide-react";
 import { PROBLEMS } from "@/data/problems";
 import { COMPANIES, NEETCODE_CATEGORIES } from "@/data/company-problems";
 import { generateTestCode } from "@/lib/test-runner";
+import { authFetch, initSession } from "@/lib/api-client";
+import { playSound, setMuted } from "@/lib/sounds";
+import { Volume2, VolumeX } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import confetti from "canvas-confetti";
 import Link from "next/link";
 
 export default function InterviewPage() {
@@ -44,12 +51,24 @@ export default function InterviewPage() {
     setSelectedCompanyId,
     customProblems,
     agentDisconnect,
+    setOnEndInterview,
+    startSession,
+    interviewStartTime,
+    language,
+    setLanguage,
   } = useInterviewStore();
 
   const [mounted, setMounted] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isFixing, setIsFixing] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
+
+  const toggleMute = () => {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    setMuted(next);
+  };
   const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,10 +103,10 @@ export default function InterviewPage() {
     try {
       setWorkspaceProgress({ step: 'Creating sandbox environment...', progress: 25 });
 
-      const res = await fetch('/api/sandbox/create', {
+      const res = await authFetch('/api/sandbox/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: 'python' }),
+        body: JSON.stringify({ language }),
       });
 
       setWorkspaceProgress({ step: 'Configuring workspace...', progress: 50 });
@@ -115,6 +134,8 @@ export default function InterviewPage() {
 
         setWorkspaceProgress({ step: 'Ready!', progress: 100 });
         setWorkspaceStatus('ready');
+        startSession();
+        playSound('ready');
         addLog(`Workspace initialized: ${newWorkspaceId}`);
       } else {
         throw new Error(data.error || 'Unknown error - no workspace ID returned');
@@ -145,7 +166,8 @@ export default function InterviewPage() {
   };
 
   useEffect(() => {
-    initWorkspace();
+    // Initialize session token first, then workspace
+    initSession().then(() => initWorkspace());
 
     // Cleanup on page unload (browser close, tab close, navigation away)
     const handleBeforeUnload = () => {
@@ -201,17 +223,17 @@ export default function InterviewPage() {
     }
 
     const testCode = currentProblem
-      ? generateTestCode(currentProblem, codeToRun)
+      ? generateTestCode(currentProblem, codeToRun, language)
       : codeToRun;
 
     try {
-      const res = await fetch('/api/sandbox/execute', {
+      const res = await authFetch('/api/sandbox/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           workspaceId,
           code: testCode,
-          language: 'python'
+          language,
         }),
       });
       const json = await res.json();
@@ -241,6 +263,12 @@ export default function InterviewPage() {
               failed: failedMatches
             }
           });
+
+          playSound(testsPassed === testsTotal ? 'success' : 'error');
+
+          if (testsPassed === testsTotal && testsTotal > 0) {
+            confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+          }
         }
       }
       if (data.stderr) {
@@ -266,13 +294,13 @@ export default function InterviewPage() {
     addLog("Agent is analyzing error pattern...", 'agent');
 
     try {
-      const res = await fetch('/api/analysis/autofix', {
+      const res = await authFetch('/api/analysis/autofix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code,
           error: lastError,
-          language: 'python',
+          language,
           workspaceId
         })
       });
@@ -313,7 +341,7 @@ export default function InterviewPage() {
     if (wsId) {
       try {
         console.log('🗑️ Deleting workspace on end interview:', wsId);
-        await fetch('/api/sandbox/delete', {
+        await authFetch('/api/sandbox/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ workspaceId: wsId }),
@@ -327,7 +355,29 @@ export default function InterviewPage() {
     }
 
     // Then show the report
+    playSound('complete');
     setShowReport(true);
+  };
+
+  // Register end-interview callback so the AI agent can trigger it via tool
+  useEffect(() => {
+    setOnEndInterview(() => handleEndInterview);
+    return () => setOnEndInterview(null);
+  }, [setOnEndInterview]);
+
+  const handleLanguageChange = (newLang: string) => {
+    if (newLang === language) return;
+    setLanguage(newLang);
+
+    // Find the current problem and swap to the appropriate starter code
+    const problem = PROBLEMS.find(p => p.id === currentProblemId);
+    if (problem) {
+      if (newLang === 'javascript' && problem.starterCodeJS) {
+        setCode(problem.starterCodeJS);
+      } else {
+        setCode(problem.starterCode);
+      }
+    }
   };
 
   if (!mounted) return null;
@@ -337,9 +387,27 @@ export default function InterviewPage() {
       <header className="h-12 border-b flex items-center px-4 justify-between bg-card z-10">
         <Link href="/" className="font-bold flex items-center gap-2 hover:opacity-80 transition-opacity">
           <Logo size={24} />
-          Daytona Interview Sandbox
+          Alexis
         </Link>
         <div className="text-xs text-muted-foreground flex items-center gap-4">
+          <Timer />
+          <select
+            value={language}
+            onChange={(e) => handleLanguageChange(e.target.value)}
+            className="h-7 px-2 rounded border border-border bg-background text-foreground text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="python">Python</option>
+            <option value="javascript">JavaScript</option>
+          </select>
+          <button
+            onClick={toggleMute}
+            className="p-1 rounded hover:bg-accent transition-colors"
+            aria-label={soundMuted ? "Unmute sounds" : "Mute sounds"}
+            title={soundMuted ? "Unmute sounds" : "Mute sounds"}
+          >
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
+          <ThemeToggle />
           {interviewMode === 'practice' && (
             <span className="text-primary flex items-center gap-1 bg-primary/10 px-2 py-1 rounded">
               <GraduationCap className="w-3 h-3" /> Practice Mode
@@ -372,7 +440,7 @@ export default function InterviewPage() {
               {/* Code Editor - Top 70% */}
               <div className="flex-[7] min-h-0 overflow-hidden">
                 <CodeEditor
-                  language="python"
+                  language={language}
                   initialCode={code}
                   onChange={(val) => setCode(val || "")}
                   onRun={() => handleRun(code)}
@@ -391,8 +459,12 @@ export default function InterviewPage() {
           {/* Right Panel: Agent & Controls */}
           <ResizablePanel defaultSize={35} minSize={20} className="bg-card border-l">
             <div className="flex flex-col h-full overflow-hidden">
-              <div className="p-4 border-b flex-1">
+              <div className="p-4 border-b shrink-0">
                 <InterviewAgent />
+              </div>
+
+              <div className="flex-1 min-h-0 overflow-hidden border-b">
+                <TranscriptPanel />
               </div>
 
               <Controls

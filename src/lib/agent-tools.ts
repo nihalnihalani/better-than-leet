@@ -2,6 +2,7 @@ import { useInterviewStore, CustomProblem } from '@/lib/store';
 import { generateTestCode } from '@/lib/test-runner';
 import { Problem } from '@/data/problems';
 import { COMPANIES, CompanyProblem, getAllCompanyProblems, NEETCODE_CATEGORIES } from '@/data/company-problems';
+import { authFetch } from '@/lib/api-client';
 
 // Wrapper to catch tool errors and prevent disconnections
 const wrapTool = (name: string, fn: Function) => async (...args: any[]) => {
@@ -63,7 +64,7 @@ function isCompanyProblem(problem: Problem | CompanyProblem): problem is Company
 }
 
 
-export const getAgentTools = (workspaceId: string | null) => ({
+export const getAgentTools = () => ({
     read_candidate_code: wrapTool('read_candidate_code', async () => {
         const store = useInterviewStore.getState();
         const currentCode = store.code;
@@ -88,7 +89,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/sandbox/read', {
+        const response = await authFetch('/api/sandbox/read', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, path })
@@ -103,7 +104,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/analysis/coderabbit', {
+        const response = await authFetch('/api/analysis/coderabbit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId })
@@ -132,10 +133,10 @@ export const getAgentTools = (workspaceId: string | null) => ({
         // Find current problem from either source
         const currentProblem = getCurrentProblem();
         const testCode = currentProblem
-            ? generateTestCode(currentProblem, code)
+            ? generateTestCode(currentProblem, code, language)
             : code;
 
-        const response = await fetch('/api/sandbox/execute', {
+        const response = await authFetch('/api/sandbox/execute', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, code: testCode, language })
@@ -172,8 +173,10 @@ export const getAgentTools = (workspaceId: string | null) => ({
         }
 
         // Return formatted test results to the agent (truncated to avoid connection drops)
-        const stdoutTrunc = result.stdout.length > 5000 ? result.stdout.substring(0, 5000) + "...[truncated]" : result.stdout;
-        const stderrTrunc = result.stderr.length > 5000 ? result.stderr.substring(0, 5000) + "...[truncated]" : result.stderr;
+        const stdout = result.stdout ?? '';
+        const stderr = result.stderr ?? '';
+        const stdoutTrunc = stdout.length > 5000 ? stdout.substring(0, 5000) + "...[truncated]" : stdout;
+        const stderrTrunc = stderr.length > 5000 ? stderr.substring(0, 5000) + "...[truncated]" : stderr;
 
         return `Exit Code: ${result.isError ? 1 : 0}\nStdout: ${stdoutTrunc}\nStderr: ${stderrTrunc}`;
     }),
@@ -183,7 +186,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/sandbox/install', {
+        const response = await authFetch('/api/sandbox/install', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, packageName, manager })
@@ -201,7 +204,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/sandbox/test', {
+        const response = await authFetch('/api/sandbox/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, testCode })
@@ -328,5 +331,23 @@ export const getAgentTools = (workspaceId: string | null) => ({
             return store.getIntegrityReport();
         }
         return "Integrity monitoring not available.";
+    }),
+
+    end_interview: wrapTool('end_interview', async () => {
+        console.log("🏁 Agent triggered end_interview");
+        const store = useInterviewStore.getState();
+        const { onEndInterview } = store;
+
+        if (!onEndInterview) {
+            return "End interview handler not available.";
+        }
+
+        // Delay slightly so the tool response is sent back to Gemini
+        // before we tear down the connection
+        setTimeout(() => {
+            onEndInterview();
+        }, 1500);
+
+        return "Interview ending. The report will be generated now. Say your final goodbye to the candidate.";
     })
 });

@@ -71,6 +71,7 @@ interface WorkspaceProgress {
 interface InterviewState {
   // Session
   status: 'idle' | 'active' | 'completed';
+  interviewStartTime: number | null;
   startSession: () => void;
   endSession: () => void;
   setStatus: (status: 'idle' | 'active' | 'completed') => void;
@@ -148,6 +149,10 @@ interface InterviewState {
   // Agent disconnect callback (for stopping Gemini Live when ending interview)
   agentDisconnect: (() => void) | null;
   setAgentDisconnect: (fn: (() => void) | null) => void;
+
+  // End interview callback (for agent-triggered interview ending)
+  onEndInterview: (() => void) | null;
+  setOnEndInterview: (fn: (() => void) | null) => void;
 }
 
 export const useInterviewStore = create<InterviewState>()(
@@ -155,7 +160,8 @@ export const useInterviewStore = create<InterviewState>()(
     (set, get) => ({
       // Session
       status: 'idle',
-      startSession: () => set({ status: 'active' }),
+      interviewStartTime: null,
+      startSession: () => set({ status: 'active', interviewStartTime: Date.now() }),
       endSession: () => set({ status: 'completed' }),
       setStatus: (status) => set({ status }),
 
@@ -273,6 +279,10 @@ export const useInterviewStore = create<InterviewState>()(
       // Agent disconnect callback
       agentDisconnect: null,
       setAgentDisconnect: (fn) => set({ agentDisconnect: fn }),
+
+      // End interview callback
+      onEndInterview: null,
+      setOnEndInterview: (fn) => set({ onEndInterview: fn }),
     }),
     {
       name: 'interview-storage',
