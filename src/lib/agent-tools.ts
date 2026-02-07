@@ -64,7 +64,7 @@ function isCompanyProblem(problem: Problem | CompanyProblem): problem is Company
 }
 
 
-export const getAgentTools = (workspaceId: string | null) => ({
+export const getAgentTools = () => ({
     read_candidate_code: wrapTool('read_candidate_code', async () => {
         const store = useInterviewStore.getState();
         const currentCode = store.code;
@@ -89,7 +89,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/sandbox/read', {
+        const response = await authFetch('/api/sandbox/read', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, path })
@@ -104,7 +104,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/analysis/coderabbit', {
+        const response = await authFetch('/api/analysis/coderabbit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId })
@@ -173,8 +173,10 @@ export const getAgentTools = (workspaceId: string | null) => ({
         }
 
         // Return formatted test results to the agent (truncated to avoid connection drops)
-        const stdoutTrunc = result.stdout.length > 5000 ? result.stdout.substring(0, 5000) + "...[truncated]" : result.stdout;
-        const stderrTrunc = result.stderr.length > 5000 ? result.stderr.substring(0, 5000) + "...[truncated]" : result.stderr;
+        const stdout = result.stdout ?? '';
+        const stderr = result.stderr ?? '';
+        const stdoutTrunc = stdout.length > 5000 ? stdout.substring(0, 5000) + "...[truncated]" : stdout;
+        const stderrTrunc = stderr.length > 5000 ? stderr.substring(0, 5000) + "...[truncated]" : stderr;
 
         return `Exit Code: ${result.isError ? 1 : 0}\nStdout: ${stdoutTrunc}\nStderr: ${stderrTrunc}`;
     }),
@@ -184,7 +186,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/sandbox/install', {
+        const response = await authFetch('/api/sandbox/install', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, packageName, manager })
@@ -202,7 +204,7 @@ export const getAgentTools = (workspaceId: string | null) => ({
         const workspaceId = useInterviewStore.getState().workspaceId;
         if (!workspaceId) return "No active workspace.";
 
-        const response = await fetch('/api/sandbox/test', {
+        const response = await authFetch('/api/sandbox/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId, testCode })

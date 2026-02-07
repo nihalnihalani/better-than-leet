@@ -31,6 +31,9 @@ const MAX_RETRY_ATTEMPTS = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
 const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
 
+// After an interruption, if no model response within this time, nudge the model
+const POST_INTERRUPT_TIMEOUT_MS = 7000;
+
 // Interview mode type
 export type InterviewMode = 'real' | 'practice';
 
@@ -390,19 +393,45 @@ export class GeminiLiveClient {
 
     // Handle server content (audio/text/interruption/turnComplete)
     if (msg.serverContent) {
-      if (msg.serverContent.interrupted) {
+      const wasInterrupted = !!msg.serverContent.interrupted;
+
+      if (wasInterrupted) {
         console.log("🛑 Model interrupted by user");
         this.clearAudioQueue();
+        this.pendingUserInput = true;
         this.onInterrupted();
+
+        // Start a timer: if the model doesn't respond after the user
+        // finishes speaking, nudge it to reply. This handles the case
+        // where Gemini's VAD detects the interruption but the model
+        // never generates a follow-up response.
+        if (this.responseCheckTimeoutId) {
+          clearTimeout(this.responseCheckTimeoutId);
+        }
+        this.responseCheckTimeoutId = setTimeout(() => {
+          this.responseCheckTimeoutId = null;
+          if (this.pendingUserInput && this._isConnected && this.ws) {
+            console.log("⚠️ No model response after interruption - prompting to speak");
+            this.onNoResponse();
+            this.promptToSpeak();
+          }
+        }, POST_INTERRUPT_TIMEOUT_MS);
       }
 
       if (msg.serverContent.turnComplete) {
-        console.log("✅ Model turn complete");
-        this.pendingUserInput = false;
+        // When turnComplete arrives alongside interrupted, it's the
+        // cancelled model turn ending - NOT a response to the user.
+        // Don't clear the pending state or nudge timer in that case.
+        if (!wasInterrupted) {
+          console.log("✅ Model turn complete");
+          this.pendingUserInput = false;
 
-        if (this.responseCheckTimeoutId) {
-          clearTimeout(this.responseCheckTimeoutId);
-          this.responseCheckTimeoutId = null;
+          if (this.responseCheckTimeoutId) {
+            clearTimeout(this.responseCheckTimeoutId);
+            this.responseCheckTimeoutId = null;
+          }
+        } else {
+          console.log("✅ Interrupted model turn ended (waiting for new response)");
         }
 
         this.onTurnEnd();
@@ -414,6 +443,13 @@ export class GeminiLiveClient {
       }
 
       if (msg.serverContent.modelTurn) {
+        // Model is responding - clear any pending nudge timer
+        this.pendingUserInput = false;
+        if (this.responseCheckTimeoutId) {
+          clearTimeout(this.responseCheckTimeoutId);
+          this.responseCheckTimeoutId = null;
+        }
+
         const parts = msg.serverContent.modelTurn.parts || [];
         let hasAudioResponse = false;
         let hasTextResponse = false;
@@ -527,9 +563,10 @@ export class GeminiLiveClient {
     if (errorMessage) {
       console.error("❌", errorMessage);
       this.onError(new Error(errorMessage));
+      this.onStatusChange('error');
+    } else {
+      this.onStatusChange('disconnected');
     }
-
-    this.onStatusChange('disconnected');
     this.stopAudio();
   }
 
@@ -699,6 +736,8 @@ ${p.starterCode}
       // Nodes may already be disconnected
     }
 
+    this.clearAudioQueue();
+
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach(track => track.stop());
       this.mediaStream = null;
@@ -711,7 +750,6 @@ ${p.starterCode}
       this.outputAudioContext.close().catch(() => {});
       this.outputAudioContext = null;
     }
-    this.clearAudioQueue();
   }
 
   // --- Audio Output ---

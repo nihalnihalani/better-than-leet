@@ -30,9 +30,8 @@ export function InterviewAgent() {
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
         console.log("🛠️ Handling Tool Calls:", functionCalls.map((c: any) => c.name));
 
-        // Get fresh tools with current workspaceId from store
-        const currentWorkspaceId = useInterviewStore.getState().workspaceId;
-        const toolFunctions = getAgentTools(currentWorkspaceId);
+        // Get fresh tools - they read workspaceId from the store internally
+        const toolFunctions = getAgentTools();
 
         const responses = [];
 
@@ -181,6 +180,9 @@ export function InterviewAgent() {
 
         return () => {
             cancelled = true;
+            if (codeUpdateTimeoutRef.current) {
+                clearTimeout(codeUpdateTimeoutRef.current);
+            }
             if (clientRef.current) {
                 clientRef.current.disconnect();
                 clientRef.current = null;
@@ -189,18 +191,90 @@ export function InterviewAgent() {
         };
     }, [workspaceId, interviewMode, setAgentDisconnect]); // Re-init if workspace or interview mode changes
 
+    // Track previous code to detect meaningful changes
+    const previousCodeRef = useRef<string>('');
+    const codeUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const lastCodeUpdateRef = useRef<number>(0);
+
+    // Helper to get current problem context for Gemini
+    const getCurrentProblemContext = useCallback((): ProblemContext | null => {
+        if (!currentProblemId) return null;
+
+        // Try regular problems first
+        const regularProblem = PROBLEMS.find(p => p.id === currentProblemId);
+        if (regularProblem) {
+            return {
+                title: regularProblem.title,
+                difficulty: regularProblem.difficulty,
+                description: regularProblem.description,
+                examples: regularProblem.examples,
+                constraints: regularProblem.constraints,
+                functionName: regularProblem.functionName,
+                starterCode: regularProblem.starterCode,
+            };
+        }
+
+        // Try company problems (practice mode)
+        if (interviewMode === 'practice' && selectedCompanyId) {
+            const company = COMPANIES.find(c => c.id === selectedCompanyId);
+            const companyProblem = company?.problems.find(p => p.id === currentProblemId);
+            if (companyProblem) {
+                return {
+                    title: companyProblem.title,
+                    difficulty: companyProblem.difficulty,
+                    description: companyProblem.description,
+                    examples: companyProblem.examples,
+                    constraints: companyProblem.constraints,
+                    functionName: companyProblem.functionName,
+                    starterCode: companyProblem.starterCode,
+                    companyName: company?.name,
+                    tags: companyProblem.tags,
+                };
+            }
+        }
+
+        return null;
+    }, [currentProblemId, interviewMode, selectedCompanyId]);
+
+    const handleStart = useCallback(async () => {
+        console.log("🚀 handleStart called, clientRef.current:", !!clientRef.current);
+
+        if (!clientRef.current) {
+            console.error("❌ Gemini client not initialized!");
+            return;
+        }
+
+        try {
+            // Set problem context BEFORE connecting so Gemini knows the problem
+            const problemContext = getCurrentProblemContext();
+            if (problemContext) {
+                clientRef.current.setProblemContext(problemContext);
+                console.log(`📋 Starting interview with problem: ${problemContext.title}`);
+            } else {
+                console.warn("⚠️ No problem selected - Gemini won't know what to interview about");
+            }
+
+            console.log("🔌 Calling connect()...");
+            await clientRef.current.connect();
+            console.log("✅ Connect called successfully");
+        } catch (err) {
+            console.error("❌ Error in handleStart:", err);
+        }
+    }, [getCurrentProblemContext]);
+
+    const handleStop = useCallback(() => {
+        if (clientRef.current) {
+            clientRef.current.disconnect();
+        }
+    }, []);
+
     // Auto-start when workspace is ready
     useEffect(() => {
         if (workspaceStatus === 'ready' && status === 'disconnected' && clientRef.current) {
             console.log("🚀 Auto-starting Gemini Live (workspace ready)");
             handleStart();
         }
-    }, [workspaceStatus, status]);
-
-    // Track previous code to detect meaningful changes
-    const previousCodeRef = useRef<string>('');
-    const codeUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    const lastCodeUpdateRef = useRef<number>(0);
+    }, [workspaceStatus, status, handleStart]);
 
     // Send code updates to Gemini when candidate pauses typing (with longer debounce)
     useEffect(() => {
@@ -243,78 +317,6 @@ export function InterviewAgent() {
             }
         };
     }, [code, status]);
-
-    // Helper to get current problem context for Gemini
-    const getCurrentProblemContext = (): ProblemContext | null => {
-        if (!currentProblemId) return null;
-
-        // Try regular problems first
-        const regularProblem = PROBLEMS.find(p => p.id === currentProblemId);
-        if (regularProblem) {
-            return {
-                title: regularProblem.title,
-                difficulty: regularProblem.difficulty,
-                description: regularProblem.description,
-                examples: regularProblem.examples,
-                constraints: regularProblem.constraints,
-                functionName: regularProblem.functionName,
-                starterCode: regularProblem.starterCode,
-            };
-        }
-
-        // Try company problems (practice mode)
-        if (interviewMode === 'practice' && selectedCompanyId) {
-            const company = COMPANIES.find(c => c.id === selectedCompanyId);
-            const companyProblem = company?.problems.find(p => p.id === currentProblemId);
-            if (companyProblem) {
-                return {
-                    title: companyProblem.title,
-                    difficulty: companyProblem.difficulty,
-                    description: companyProblem.description,
-                    examples: companyProblem.examples,
-                    constraints: companyProblem.constraints,
-                    functionName: companyProblem.functionName,
-                    starterCode: companyProblem.starterCode,
-                    companyName: company?.name,
-                    tags: companyProblem.tags,
-                };
-            }
-        }
-
-        return null;
-    };
-
-    const handleStart = async () => {
-        console.log("🚀 handleStart called, clientRef.current:", !!clientRef.current);
-
-        if (!clientRef.current) {
-            console.error("❌ Gemini client not initialized!");
-            return;
-        }
-
-        try {
-            // Set problem context BEFORE connecting so Gemini knows the problem
-            const problemContext = getCurrentProblemContext();
-            if (problemContext) {
-                clientRef.current.setProblemContext(problemContext);
-                console.log(`📋 Starting interview with problem: ${problemContext.title}`);
-            } else {
-                console.warn("⚠️ No problem selected - Gemini won't know what to interview about");
-            }
-
-            console.log("🔌 Calling connect()...");
-            await clientRef.current.connect();
-            console.log("✅ Connect called successfully");
-        } catch (err) {
-            console.error("❌ Error in handleStart:", err);
-        }
-    };
-
-    const handleStop = () => {
-        if (clientRef.current) {
-            clientRef.current.disconnect();
-        }
-    };
 
     return (
         <div id="agent-container" className="flex flex-col gap-4">
