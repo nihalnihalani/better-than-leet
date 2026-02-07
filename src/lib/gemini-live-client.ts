@@ -239,7 +239,12 @@ export class GeminiLiveClient {
             // (longer than default to let user complete thoughts after interrupting)
             silenceDurationMs: 700
           }
-        }
+        },
+        // Enable transcription of user's voice input so the model has
+        // text context of what was said, especially during interruptions
+        inputAudioTranscription: {},
+        // Enable transcription of model's own audio output
+        outputAudioTranscription: {}
       }
     };
 
@@ -430,7 +435,7 @@ export class GeminiLiveClient {
             this.onNoResponse();
             // Use interruption-aware prompt so model responds to what the
             // user said rather than resuming its previous train of thought
-            this.promptToSpeak("[The candidate interrupted you and spoke to you. DO NOT continue your previous response. Respond to what they just said. If you couldn't understand them, ask them to repeat.]");
+            this.promptToSpeak("[IMPORTANT: The candidate just interrupted you. Your previous response has been CANCELLED - do NOT continue it. Listen to what the candidate said and respond ONLY to that. If you didn't catch what they said, ask: 'Sorry, could you repeat that?']");
           }
         }, POST_INTERRUPT_TIMEOUT_MS);
       }
