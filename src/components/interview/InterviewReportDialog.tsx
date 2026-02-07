@@ -47,7 +47,11 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
     code,
     transcript,
     testResults,
-    currentProblemId
+    currentProblemId,
+    interviewMode,
+    diagramNodes,
+    diagramEdges,
+    language
   } = useInterviewStore();
 
   const [aiReport, setAiReport] = useState<any>(null); // StructuredReport
@@ -69,16 +73,27 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
     setError(null);
 
     try {
+      const isSystemDesign = interviewMode === 'system-design';
+      
       const response = await authFetch('/api/interview/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcript,
-          code,
-          language: 'python',
-          testResults,
+          interviewMode,
+          // Coding interview fields
+          ...(isSystemDesign ? {} : {
+            code,
+            language: language || 'python',
+            testResults,
+          }),
+          // System design fields
+          ...(isSystemDesign ? {
+            diagramNodes,
+            diagramEdges,
+          } : {}),
           integrity,
-          problemId: currentProblemId || 'Coding Challenge'
+          problemId: currentProblemId || (isSystemDesign ? 'System Design Challenge' : 'Coding Challenge')
         })
       });
 

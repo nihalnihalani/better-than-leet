@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { StatusIndicator } from './StatusIndicator';
 import { Visualizer } from './Visualizer';
 import { ThinkingIndicator } from './ThinkingIndicator';
-import { Mic, MicOff, GraduationCap } from 'lucide-react';
+import { Mic, MicOff, GraduationCap, Layers } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { getAgentTools } from '@/lib/agent-tools';
 import { GeminiLiveClient, ConnectionStatus, InterviewMode, ProblemContext } from '@/lib/gemini-live-client';
@@ -14,7 +14,7 @@ import { COMPANIES } from '@/data/company-problems';
 import { authFetch } from '@/lib/api-client';
 
 export function InterviewAgent() {
-    const { code, workspaceId, workspaceStatus, interviewMode, currentProblemId, selectedCompanyId, setAgentDisconnect } = useInterviewStore();
+    const { code, workspaceId, workspaceStatus, interviewMode, currentProblemId, selectedCompanyId, selectedTopicId, setAgentDisconnect } = useInterviewStore();
     const [isThinking, setIsThinking] = useState(false);
     const [currentAction, setCurrentAction] = useState<string>('');
     
@@ -24,54 +24,65 @@ export function InterviewAgent() {
     const [volume, setVolume] = useState(0);
     const [isModelSpeaking, setIsModelSpeaking] = useState(false);
     const [wasInterrupted, setWasInterrupted] = useState(false);
+    const [clientReady, setClientReady] = useState(false);
     const clientRef = useRef<GeminiLiveClient | null>(null);
+    const hasConnectedOnceRef = useRef(false);
 
     // Tool handler - always gets fresh state to avoid closure issues
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
         console.log("🛠️ Handling Tool Calls:", functionCalls.map((c: any) => c.name));
 
+        // If end_interview is being called, mark the client as ending
+        // This prevents 1008 errors from being treated as connection failures
+        if (functionCalls.some((c: any) => c.name === 'end_interview') && clientRef.current) {
+            clientRef.current.markInterviewEnding();
+        }
+
         // Get fresh tools - they read workspaceId from the store internally
         const toolFunctions = getAgentTools();
 
-        const responses = [];
+        setIsThinking(true);
+        setCurrentAction(`Running ${functionCalls.length} tool(s)...`);
 
-        for (const call of functionCalls) {
-            const name = call.name;
-            const args = call.args || {};
-            const id = call.id; // Gemini function call ID
-            const fn = (toolFunctions as any)[name];
+        // Execute all tools in parallel for better performance
+        const responses = await Promise.all(
+            functionCalls.map(async (call) => {
+                const name = call.name;
+                const args = call.args || {};
+                const id = call.id;
+                const fn = (toolFunctions as any)[name];
 
-            console.log(`🔧 Executing tool: ${name}`, { id, args });
+                console.log(`🔧 Executing tool: ${name}`, { id, args });
 
-            if (fn) {
-                setIsThinking(true);
-                setCurrentAction(`Running ${name}...`);
-                try {
-                    const result = await fn(args);
-                    console.log(`✅ Tool ${name} result:`, typeof result === 'string' ? result.substring(0, 200) : result);
-                    responses.push({
-                        id: id, // Include the function call ID
-                        name: name,
-                        response: { result: result }
-                    });
-                } catch (err) {
-                    console.error(`❌ Tool ${name} error:`, err);
-                    responses.push({
+                if (fn) {
+                    try {
+                        const result = await fn(args);
+                        console.log(`✅ Tool ${name} result:`, typeof result === 'string' ? result.substring(0, 200) : result);
+                        return {
+                            id: id,
+                            name: name,
+                            response: { result: result }
+                        };
+                    } catch (err) {
+                        console.error(`❌ Tool ${name} error:`, err);
+                        return {
+                            id: id,
+                            name: name,
+                            response: { error: String(err) }
+                        };
+                    }
+                } else {
+                    console.warn(`⚠️ Tool ${name} not found in toolFunctions`);
+                    return {
                         id: id,
                         name: name,
-                        response: { error: String(err) }
-                    });
+                        response: { error: `Tool ${name} not found` }
+                    };
                 }
-                setIsThinking(false);
-            } else {
-                console.warn(`⚠️ Tool ${name} not found in toolFunctions`);
-                responses.push({
-                    id: id,
-                    name: name,
-                    response: { error: `Tool ${name} not found` }
-                });
-            }
-        }
+            })
+        );
+
+        setIsThinking(false);
         return responses;
     }, []); // Empty deps - always get fresh state from store
 
@@ -105,10 +116,15 @@ export function InterviewAgent() {
                 return;
             }
 
-            // Create client with current interview mode (real or practice)
-            const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
+            // Create client with current interview mode
+            const mode: InterviewMode = interviewMode as InterviewMode;
             console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
             const client = new GeminiLiveClient(apiKey.trim(), mode);
+
+            // Set system design topic if in system-design mode
+            if (mode === 'system-design' && selectedTopicId) {
+                client.setSystemDesignTopic(selectedTopicId);
+            }
 
         client.onStatusChange = (s) => setStatus(s);
         client.onToolsCall = handleToolsCall;
@@ -156,16 +172,21 @@ export function InterviewAgent() {
             console.warn("⚠️ Model didn't respond to user input");
         };
 
-        // Send initial code context when Gemini session is ready
+        // Send initial code context when Gemini session is ready (skip for system design - no code editor)
         client.onSetupComplete = () => {
-            const currentCode = useInterviewStore.getState().code;
-            if (currentCode && currentCode.trim()) {
-                console.log("📝 Sending initial code context to Gemini");
-                client.sendCodeContext(currentCode, true);
+            if (mode !== 'system-design') {
+                const currentCode = useInterviewStore.getState().code;
+                if (currentCode && currentCode.trim()) {
+                    console.log("📝 Sending initial code context to Gemini");
+                    client.sendCodeContext(currentCode, true);
+                }
+            } else {
+                console.log("📐 System design mode - skipping code context");
             }
         };
 
         clientRef.current = client;
+        setClientReady(true);
         console.log(`🎙️ Gemini Live client initialized in ${mode} mode`);
 
         // Register disconnect callback for ending interview
@@ -180,6 +201,7 @@ export function InterviewAgent() {
 
         return () => {
             cancelled = true;
+            setClientReady(false);
             if (codeUpdateTimeoutRef.current) {
                 clearTimeout(codeUpdateTimeoutRef.current);
             }
@@ -189,7 +211,7 @@ export function InterviewAgent() {
             }
             setAgentDisconnect(null);
         };
-    }, [workspaceId, interviewMode, setAgentDisconnect]); // Re-init if workspace or interview mode changes
+    }, [workspaceId, interviewMode, selectedTopicId, setAgentDisconnect]); // Re-init if workspace, interview mode, or topic changes
 
     // Track previous code to detect meaningful changes
     const previousCodeRef = useRef<string>('');
@@ -236,6 +258,52 @@ export function InterviewAgent() {
         return null;
     }, [currentProblemId, interviewMode, selectedCompanyId]);
 
+    // Build context recovery message for reconnection
+    const buildContextRecovery = useCallback(() => {
+        const state = useInterviewStore.getState();
+        const { transcript, diagramNodes, diagramEdges } = state;
+
+        // Build transcript summary (last 10 messages, truncated)
+        const recentTranscript = transcript.slice(-10);
+        const transcriptSummary = recentTranscript.map(msg => 
+            `${msg.speaker === 'agent' ? 'You' : 'Candidate'}: ${msg.message.substring(0, 150)}${msg.message.length > 150 ? '...' : ''}`
+        ).join('\n');
+
+        // Build diagram state summary
+        let diagramSummary = '';
+        if (diagramNodes.length > 0) {
+            diagramSummary = `\n\n**Current Diagram State:**\n- Nodes (${diagramNodes.length}): ${diagramNodes.map(n => `${n.label} (${n.type})`).join(', ')}\n- Edges (${diagramEdges.length}): ${diagramEdges.map(e => `${e.source}→${e.target}`).join(', ')}`;
+        }
+
+        // Estimate interview phase based on diagram complexity (same logic as SystemDesignPanel)
+        let phase = 'Requirements';
+        if (diagramNodes.length >= 8) phase = 'Deep Dive';
+        else if (diagramNodes.length >= 4) phase = 'Design';
+
+        const contextMessage = `[CONTEXT RECOVERY - You were disconnected]
+
+**What happened:** The connection was lost. This message contains a summary of the conversation so far.
+
+**Recent conversation:**
+${transcriptSummary || '(No conversation yet)'}
+${diagramSummary}
+
+**Current Phase:** ${phase}
+
+**IMPORTANT INSTRUCTIONS:**
+- DO NOT re-introduce yourself or restart the interview
+- DO NOT say "it looks like we got disconnected" or similar - just continue naturally
+- Review the above context and continue the conversation from where it left off
+- If you were in the middle of explaining something, you may briefly summarize your last point then continue
+- If the candidate was speaking, acknowledge what they said and respond appropriately
+- Call read_diagram() to see the current diagram state in detail
+- If confused about conversation history, call read_transcript() to review more messages
+
+Continue the interview naturally from this point.`;
+
+        return contextMessage;
+    }, []);
+
     const handleStart = useCallback(async () => {
         console.log("🚀 handleStart called, clientRef.current:", !!clientRef.current);
 
@@ -245,22 +313,37 @@ export function InterviewAgent() {
         }
 
         try {
-            // Set problem context BEFORE connecting so Gemini knows the problem
-            const problemContext = getCurrentProblemContext();
-            if (problemContext) {
-                clientRef.current.setProblemContext(problemContext);
-                console.log(`📋 Starting interview with problem: ${problemContext.title}`);
+            if (interviewMode === 'system-design') {
+                // System design mode: topic is already set on client
+                console.log(`📐 Starting system design interview for topic: ${selectedTopicId}`);
             } else {
-                console.warn("⚠️ No problem selected - Gemini won't know what to interview about");
+                // Set problem context BEFORE connecting so Gemini knows the problem
+                const problemContext = getCurrentProblemContext();
+                if (problemContext) {
+                    clientRef.current.setProblemContext(problemContext);
+                    console.log(`📋 Starting interview with problem: ${problemContext.title}`);
+                } else {
+                    console.warn("⚠️ No problem selected - Gemini won't know what to interview about");
+                }
+            }
+
+            // If this is a reconnection (not first connect), inject context recovery
+            if (hasConnectedOnceRef.current) {
+                const contextRecovery = buildContextRecovery();
+                clientRef.current.setReconnectionContext(contextRecovery);
+                console.log("🔄 This is a reconnection - context recovery prepared");
+            } else {
+                console.log("🆕 This is the first connection");
             }
 
             console.log("🔌 Calling connect()...");
             await clientRef.current.connect();
+            hasConnectedOnceRef.current = true;
             console.log("✅ Connect called successfully");
         } catch (err) {
             console.error("❌ Error in handleStart:", err);
         }
-    }, [getCurrentProblemContext]);
+    }, [getCurrentProblemContext, interviewMode, selectedTopicId, buildContextRecovery]);
 
     const handleStop = useCallback(() => {
         if (clientRef.current) {
@@ -268,16 +351,21 @@ export function InterviewAgent() {
         }
     }, []);
 
-    // Auto-start when workspace is ready
+    // Auto-start when workspace is ready AND client is initialized
+    // clientReady state ensures this re-runs when the client finishes async init
     useEffect(() => {
-        if (workspaceStatus === 'ready' && status === 'disconnected' && clientRef.current) {
-            console.log("🚀 Auto-starting Gemini Live (workspace ready)");
+        if (workspaceStatus === 'ready' && status === 'disconnected' && clientReady && clientRef.current) {
+            console.log("🚀 Auto-starting Gemini Live (workspace ready, client ready)");
             handleStart();
         }
-    }, [workspaceStatus, status, handleStart]);
+    }, [workspaceStatus, status, clientReady, handleStart]);
 
     // Send code updates to Gemini when candidate pauses typing (with longer debounce)
+    // Skip in system design mode - no code editor
     useEffect(() => {
+        // Skip for system design mode - there's no code editor
+        if (interviewMode === 'system-design') return;
+
         // Only send if connected and code has meaningfully changed
         if (!clientRef.current?.isConnected() || status !== 'connected') {
             return;
@@ -316,7 +404,7 @@ export function InterviewAgent() {
                 clearTimeout(codeUpdateTimeoutRef.current);
             }
         };
-    }, [code, status]);
+    }, [code, status, interviewMode]);
 
     return (
         <div id="agent-container" className="flex flex-col gap-4">

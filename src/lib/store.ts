@@ -2,6 +2,23 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { CodeRabbitReview } from './coderabbit';
 import { LARGE_PASTE_THRESHOLD } from './constants';
+import type { SystemDesignNodeType } from '@/components/diagram/CustomNodes';
+
+// Diagram node stored in Zustand
+export interface DiagramNode {
+  id: string;
+  type: SystemDesignNodeType;
+  label: string;
+  subtitle?: string;
+}
+
+// Diagram edge stored in Zustand
+export interface DiagramEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
 
 interface ReviewResult {
   score: number;
@@ -132,13 +149,25 @@ interface InterviewState {
   toggleWizardMode: () => void;
 
   // Practice Interview Mode
-  interviewMode: 'real' | 'practice';
-  setInterviewMode: (mode: 'real' | 'practice') => void;
+  interviewMode: 'real' | 'practice' | 'system-design';
+  setInterviewMode: (mode: 'real' | 'practice' | 'system-design') => void;
   selectedCompanyId: string | null;
   setSelectedCompanyId: (id: string | null) => void;
   practiceHistory: PracticeSession[];
   addPracticeSession: (session: PracticeSession) => void;
   clearPracticeHistory: () => void;
+
+  // System Design
+  selectedTopicId: string | null;
+  setSelectedTopicId: (id: string | null) => void;
+  diagramNodes: DiagramNode[];
+  diagramEdges: DiagramEdge[];
+  addDiagramNode: (node: DiagramNode) => void;
+  removeDiagramNode: (id: string) => void;
+  updateDiagramNode: (id: string, updates: Partial<DiagramNode>) => void;
+  addDiagramEdge: (edge: DiagramEdge) => void;
+  removeDiagramEdge: (id: string) => void;
+  clearDiagram: () => void;
 
   // Custom Problems (LeetCode import / manual)
   customProblems: CustomProblem[];
@@ -262,6 +291,31 @@ export const useInterviewStore = create<InterviewState>()(
       })),
       clearPracticeHistory: () => set({ practiceHistory: [] }),
 
+      // System Design
+      selectedTopicId: null,
+      setSelectedTopicId: (selectedTopicId) => set({ selectedTopicId }),
+      diagramNodes: [],
+      diagramEdges: [],
+      addDiagramNode: (node) => set((state) => ({
+        diagramNodes: [...state.diagramNodes, node]
+      })),
+      removeDiagramNode: (id) => set((state) => ({
+        diagramNodes: state.diagramNodes.filter(n => n.id !== id),
+        diagramEdges: state.diagramEdges.filter(e => e.source !== id && e.target !== id),
+      })),
+      updateDiagramNode: (id, updates) => set((state) => ({
+        diagramNodes: state.diagramNodes.map(n =>
+          n.id === id ? { ...n, ...updates } : n
+        )
+      })),
+      addDiagramEdge: (edge) => set((state) => ({
+        diagramEdges: [...state.diagramEdges, edge]
+      })),
+      removeDiagramEdge: (id) => set((state) => ({
+        diagramEdges: state.diagramEdges.filter(e => e.id !== id)
+      })),
+      clearDiagram: () => set({ diagramNodes: [], diagramEdges: [] }),
+
       // Custom Problems
       customProblems: [],
       addCustomProblem: (problem) => set((state) => ({
@@ -286,7 +340,7 @@ export const useInterviewStore = create<InterviewState>()(
     }),
     {
       name: 'interview-storage',
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => localStorage),
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<InterviewState>;
@@ -337,6 +391,15 @@ export const useInterviewStore = create<InterviewState>()(
             customProblems: []
           };
         }
+        if (version === 5) {
+          // Migrate from version 5: Add system design fields
+          return {
+            ...state,
+            selectedTopicId: null,
+            diagramNodes: [],
+            diagramEdges: [],
+          };
+        }
         return state as InterviewState;
       },
       partialize: (state) => ({
@@ -347,7 +410,11 @@ export const useInterviewStore = create<InterviewState>()(
         selectedCompanyId: state.selectedCompanyId, // Persist selected company for practice mode
         currentProblemId: state.currentProblemId, // Persist current problem
         practiceHistory: state.practiceHistory, // Persist practice history
-        customProblems: state.customProblems // Persist custom problems
+        customProblems: state.customProblems, // Persist custom problems
+        selectedTopicId: state.selectedTopicId, // Persist selected topic for system design
+        transcript: state.transcript, // Persist conversation transcript
+        diagramNodes: state.diagramNodes, // Persist diagram nodes
+        diagramEdges: state.diagramEdges, // Persist diagram edges
       }),
     }
   )

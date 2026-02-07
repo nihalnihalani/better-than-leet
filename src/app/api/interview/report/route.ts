@@ -31,18 +31,26 @@ export async function POST(req: NextRequest) {
     try {
         const reportData: InterviewReportData = await req.json();
 
-        // Validate required fields
-        if (!reportData.code || !reportData.language) {
+        // Validate required fields based on interview mode
+        const isSystemDesign = reportData.interviewMode === 'system-design';
+        
+        if (!isSystemDesign && (!reportData.code || !reportData.language)) {
             return NextResponse.json(
-                { error: 'Missing required fields: code and language are required' },
+                { error: 'Missing required fields: code and language are required for coding interviews' },
                 { status: 400 }
             );
         }
 
         console.log('📊 Generating interview report...');
+        console.log(`- Interview mode: ${reportData.interviewMode || 'coding'}`);
         console.log(`- Transcript entries: ${reportData.transcript?.length || 0}`);
-        console.log(`- Test results: ${reportData.testResults?.length || 0}`);
-        console.log(`- Code length: ${reportData.code.length} chars`);
+        if (isSystemDesign) {
+            console.log(`- Diagram nodes: ${reportData.diagramNodes?.length || 0}`);
+            console.log(`- Diagram edges: ${reportData.diagramEdges?.length || 0}`);
+        } else {
+            console.log(`- Test results: ${reportData.testResults?.length || 0}`);
+            console.log(`- Code length: ${reportData.code?.length || 0} chars`);
+        }
 
         const report = await generateInterviewReport(reportData);
 

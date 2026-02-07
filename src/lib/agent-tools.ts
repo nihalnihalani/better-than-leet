@@ -254,6 +254,20 @@ export const getAgentTools = () => ({
         const store = useInterviewStore.getState();
         const { interviewMode, selectedCompanyId } = store;
 
+        if (interviewMode === 'system-design') {
+            return JSON.stringify({
+                mode: 'system-design',
+                role: 'SYSTEM_DESIGN_INTERVIEWER',
+                guidance: `You are conducting a SYSTEM DESIGN interview. Your goals:
+1. Guide the candidate through designing a distributed system
+2. Use update_diagram to build the architecture diagram as discussion progresses
+3. Probe trade-offs: "Why X over Y?" "What if this fails?"
+4. Cover: requirements, high-level design, deep dive, scaling
+5. Let the candidate drive the design, guide with questions
+6. NO coding - this is a design interview`
+            }, null, 2);
+        }
+
         if (interviewMode === 'practice') {
             const company = COMPANIES.find(c => c.id === selectedCompanyId);
             return JSON.stringify({
@@ -349,5 +363,166 @@ export const getAgentTools = () => ({
         }, 1500);
 
         return "Interview ending. The report will be generated now. Say your final goodbye to the candidate.";
-    })
+    }),
+
+    read_transcript: wrapTool('read_transcript', async (args?: { last_n_messages?: number }) => {
+        console.log("📜 read_transcript called");
+        const store = useInterviewStore.getState();
+        const { transcript } = store;
+
+        if (transcript.length === 0) {
+            return "The conversation transcript is empty. No messages have been exchanged yet.";
+        }
+
+        const limit = args?.last_n_messages || 20;
+        const recentMessages = transcript.slice(-limit);
+
+        const formattedTranscript = recentMessages.map((msg, idx) => {
+            const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+            const speaker = msg.speaker === 'agent' ? 'You (Alexis)' : 'Candidate';
+            const type = msg.type === 'text' ? '[text]' : '[audio]';
+            return `[${timestamp}] ${speaker} ${type}: ${msg.message}`;
+        }).join('\n\n');
+
+        return JSON.stringify({
+            total_messages: transcript.length,
+            showing_last: recentMessages.length,
+            transcript: formattedTranscript,
+            note: transcript.length > limit ? `Showing last ${limit} messages of ${transcript.length} total. Call with last_n_messages parameter to see more.` : 'Showing all messages.'
+        }, null, 2);
+    }),
+
+    // System Design diagram tool (single batched operation)
+    update_diagram: wrapTool('update_diagram', async (args: {
+        add_nodes?: Array<{ id: string; type: string; label: string; subtitle?: string }>;
+        add_edges?: Array<{ from: string; to: string; label?: string }>;
+        remove_nodes?: string[];
+        update_nodes?: Array<{ id: string; label?: string; subtitle?: string }>;
+    }) => {
+        console.log("📊 update_diagram called with batched operations:", args);
+        const store = useInterviewStore.getState();
+        const results: string[] = [];
+        const errors: string[] = [];
+
+        // Process node additions
+        if (args.add_nodes && args.add_nodes.length > 0) {
+            for (const node of args.add_nodes) {
+                if (!node.id || !node.type || !node.label) {
+                    errors.push(`Skipped node: missing id, type, or label`);
+                    continue;
+                }
+                if (store.diagramNodes.find(n => n.id === node.id)) {
+                    errors.push(`Node '${node.id}' already exists (skipped)`);
+                    continue;
+                }
+                store.addDiagramNode({
+                    id: node.id,
+                    type: node.type as any,
+                    label: node.label,
+                    subtitle: node.subtitle,
+                });
+                results.push(`Added node '${node.label}' (${node.type})`);
+            }
+        }
+
+        // Process edge additions
+        if (args.add_edges && args.add_edges.length > 0) {
+            for (const edge of args.add_edges) {
+                if (!edge.from || !edge.to) {
+                    errors.push(`Skipped edge: missing 'from' or 'to'`);
+                    continue;
+                }
+                const srcExists = store.diagramNodes.find(n => n.id === edge.from);
+                const tgtExists = store.diagramNodes.find(n => n.id === edge.to);
+                if (!srcExists) {
+                    errors.push(`Source node '${edge.from}' not found (skipped edge)`);
+                    continue;
+                }
+                if (!tgtExists) {
+                    errors.push(`Target node '${edge.to}' not found (skipped edge)`);
+                    continue;
+                }
+                const edgeId = `${edge.from}-to-${edge.to}`;
+                if (store.diagramEdges.find(e => e.id === edgeId)) {
+                    errors.push(`Edge ${edge.from}→${edge.to} already exists (skipped)`);
+                    continue;
+                }
+                store.addDiagramEdge({
+                    id: edgeId,
+                    source: edge.from,
+                    target: edge.to,
+                    label: edge.label,
+                });
+                results.push(`Added edge ${edge.from}→${edge.to}${edge.label ? ` ('${edge.label}')` : ''}`);
+            }
+        }
+
+        // Process node removals
+        if (args.remove_nodes && args.remove_nodes.length > 0) {
+            for (const nodeId of args.remove_nodes) {
+                if (store.diagramNodes.find(n => n.id === nodeId)) {
+                    store.removeDiagramNode(nodeId);
+                    results.push(`Removed node '${nodeId}' and its edges`);
+                } else {
+                    errors.push(`Node '${nodeId}' not found (skipped removal)`);
+                }
+            }
+        }
+
+        // Process node updates
+        if (args.update_nodes && args.update_nodes.length > 0) {
+            for (const update of args.update_nodes) {
+                if (!update.id) {
+                    errors.push(`Skipped update: missing node id`);
+                    continue;
+                }
+                const existing = store.diagramNodes.find(n => n.id === update.id);
+                if (!existing) {
+                    errors.push(`Node '${update.id}' not found (skipped update)`);
+                    continue;
+                }
+                const updates: any = {};
+                if (update.label) updates.label = update.label;
+                if (update.subtitle) updates.subtitle = update.subtitle;
+                store.updateDiagramNode(update.id, updates);
+                results.push(`Updated node '${update.id}'`);
+            }
+        }
+
+        // Build response
+        const summary = {
+            success: results.length > 0,
+            operations_completed: results.length,
+            operations_failed: errors.length,
+            details: results,
+            errors: errors.length > 0 ? errors : undefined,
+        };
+
+        return JSON.stringify(summary, null, 2);
+    }),
+
+    read_diagram: wrapTool('read_diagram', async () => {
+        console.log("📊 read_diagram called");
+        const store = useInterviewStore.getState();
+        const { diagramNodes, diagramEdges } = store;
+
+        if (diagramNodes.length === 0) {
+            return "The diagram is currently empty. No nodes or edges have been added yet.";
+        }
+
+        return JSON.stringify({
+            nodes: diagramNodes.map(n => ({
+                id: n.id,
+                type: n.type,
+                label: n.label,
+                subtitle: n.subtitle,
+            })),
+            edges: diagramEdges.map(e => ({
+                id: e.id,
+                source: e.source,
+                target: e.target,
+                label: e.label,
+            })),
+        }, null, 2);
+    }),
 });

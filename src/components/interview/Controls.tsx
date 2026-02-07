@@ -22,6 +22,7 @@ interface ControlsProps {
   isRunning: boolean;
   isFixing?: boolean;
   hasError?: boolean;
+  hideCodeActions?: boolean;
 }
 
 export function Controls({
@@ -30,22 +31,25 @@ export function Controls({
     onEndInterview,
     isRunning,
     isFixing,
-    hasError
+    hasError,
+    hideCodeActions
 }: ControlsProps) {
   return (
     <div className="flex flex-col gap-2 p-4">
-      <Button
-        onClick={onRun}
-        disabled={isRunning}
-        aria-busy={isRunning}
-        aria-label={isRunning ? "Running code" : "Run code"}
-        className="w-full bg-green-600 hover:bg-green-700 text-white"
-      >
-        <Play className="w-4 h-4 mr-2" fill="currentColor" aria-hidden="true" />
-        {isRunning ? "Running..." : "Run Code"}
-      </Button>
+      {!hideCodeActions && (
+        <Button
+          onClick={onRun}
+          disabled={isRunning}
+          aria-busy={isRunning}
+          aria-label={isRunning ? "Running code" : "Run code"}
+          className="w-full bg-green-600 hover:bg-green-700 text-white"
+        >
+          <Play className="w-4 h-4 mr-2" fill="currentColor" aria-hidden="true" />
+          {isRunning ? "Running..." : "Run Code"}
+        </Button>
+      )}
 
-      {hasError && onAutoFix && (
+      {!hideCodeActions && hasError && onAutoFix && (
         <Button
             onClick={onAutoFix}
             disabled={isFixing}

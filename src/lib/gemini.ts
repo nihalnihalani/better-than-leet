@@ -432,15 +432,34 @@ ${sanitizedCode}
 
 export interface InterviewReportData {
   transcript: { timestamp: number; speaker: 'agent' | 'user'; message: string }[];
-  code: string;
-  language: string;
-  testResults: {
+  interviewMode?: 'real' | 'practice' | 'system-design';
+  
+  // Coding interview fields (optional for system design)
+  code?: string;
+  language?: string;
+  testResults?: {
     timestamp: number;
     problemId: string;
     testsPassed: number;
     testsTotal: number;
     details: Record<string, unknown>;
   }[];
+  
+  // System design fields (optional for coding)
+  diagramNodes?: Array<{
+    id: string;
+    type: string;
+    label: string;
+    x: number;
+    y: number;
+  }>;
+  diagramEdges?: Array<{
+    id: string;
+    source: string;
+    target: string;
+    label?: string;
+  }>;
+  
   integrity: {
     blurCount: number;
     pasteCount: number;
@@ -503,10 +522,14 @@ export async function generateInterviewReport(
 ): Promise<StructuredInterviewReport | null> {
   return Sentry.startSpan({ name: "ai.interview_report", op: "ai.pipeline" }, async (span) => {
     try {
+      const isSystemDesign = data.interviewMode === 'system-design';
+      
       // Sanitize user-controllable inputs
-      const sanitizedCode = sanitizeCode(data.code);
-      const sanitizedLanguage = sanitizeForPrompt(data.language);
-      const sanitizedProblemId = sanitizeForPrompt(data.problemId || 'Coding Challenge');
+      const sanitizedCode = data.code ? sanitizeCode(data.code) : '';
+      const sanitizedLanguage = data.language ? sanitizeForPrompt(data.language) : '';
+      const sanitizedProblemId = sanitizeForPrompt(
+        data.problemId || (isSystemDesign ? 'System Design Challenge' : 'Coding Challenge')
+      );
 
       return await withGeminiRetry(async () => {
         // Format transcript for better readability (sanitize messages)
@@ -519,12 +542,16 @@ export async function generateInterviewReport(
           }).join('\n')
           : 'No conversation recorded during this interview.';
 
-        // Calculate test statistics
-        const latestTest = data.testResults[data.testResults.length - 1];
-        const testPassRate = latestTest
-          ? `${latestTest.testsPassed}/${latestTest.testsTotal} tests passed (${Math.round(latestTest.testsPassed / latestTest.testsTotal * 100)}%)`
-          : 'No tests executed';
-        const allTestsPassed = latestTest && latestTest.testsPassed === latestTest.testsTotal;
+        // For coding interviews: Calculate test statistics
+        let testPassRate = 'N/A';
+        let allTestsPassed = false;
+        if (!isSystemDesign && data.testResults && data.testResults.length > 0) {
+          const latestTest = data.testResults[data.testResults.length - 1];
+          testPassRate = latestTest
+            ? `${latestTest.testsPassed}/${latestTest.testsTotal} tests passed (${Math.round(latestTest.testsPassed / latestTest.testsTotal * 100)}%)`
+            : 'No tests executed';
+          allTestsPassed = latestTest && latestTest.testsPassed === latestTest.testsTotal;
+        }
 
         // Format code analysis if available
         const codeAnalysisSection = data.codeAnalysis
@@ -552,7 +579,89 @@ Issues: ${data.coderabbitReview.issues.length > 0
           ? `⚠️ WARNING: Integrity concerns detected (score: ${integrityScore}/100). Large paste events or frequent tab switches may indicate external assistance.`
           : '';
 
-        const prompt = `
+        // For system design: Format diagram data
+        const diagramSection = isSystemDesign && data.diagramNodes && data.diagramEdges
+          ? `
+**SYSTEM ARCHITECTURE DIAGRAM:**
+Nodes (${data.diagramNodes.length}):
+${data.diagramNodes.map(n => `- ${n.label} (${n.type})`).join('\n')}
+
+Connections (${data.diagramEdges.length}):
+${data.diagramEdges.map(e => {
+  const source = data.diagramNodes?.find(n => n.id === e.source)?.label || e.source;
+  const target = data.diagramNodes?.find(n => n.id === e.target)?.label || e.target;
+  return `- ${source} → ${target}${e.label ? ` (${e.label})` : ''}`;
+}).join('\n')}
+` : '';
+
+        const prompt = isSystemDesign
+          ? `
+You are a senior system design interviewer at a top tech company (FAANG-level). Generate a comprehensive, professional system design interview evaluation report.
+
+## INTERVIEW DATA
+
+**Problem:** ${sanitizedProblemId}
+**Interview Type:** System Design
+
+**CONVERSATION TRANSCRIPT:**
+${formattedTranscript}
+
+${diagramSection}
+
+**INTEGRITY METRICS:**
+- Integrity Score: ${integrityScore}/100
+- Tab Switches (Blur Events): ${data.integrity.blurCount}
+- Paste Events: ${data.integrity.pasteCount}
+- Large Paste Events (100+ chars): ${data.integrity.largePasteEvents.length}
+${integrityWarning}
+
+---
+
+## YOUR TASK
+
+Generate a detailed, fair evaluation of the system design interview. Consider:
+1. **Requirements Gathering** - Did they ask clarifying questions about scale, users, features?
+2. **High-Level Design** - Did they create a coherent architecture with appropriate components?
+3. **Deep Dives** - Did they explain trade-offs, scaling strategies, data models?
+4. **Communication** - Did they explain their design choices clearly?
+5. **Component Selection** - Did they choose appropriate databases, caching, load balancers, etc.?
+6. **Scalability** - Did they consider bottlenecks, replication, sharding, CDNs?
+7. **Integrity** - Any red flags from tab switches?
+
+**HIRE RECOMMENDATION GUIDE:**
+- STRONG HIRE: Excellent design, thorough analysis, great communication, handled scaling
+- HIRE: Solid design, good trade-offs, clear communication, addressed scale
+- LEAN HIRE: Basic design with some issues, decent communication
+- LEAN NO HIRE: Weak design, missed key components, poor scaling strategy
+- NO HIRE: Major design flaws, poor communication, integrity concerns
+
+**OUTPUT FORMAT:**
+Return ONLY valid JSON with this exact structure:
+{
+  "overallScore": <0-100>,
+  "hireRecommendation": "<STRONG HIRE|HIRE|LEAN HIRE|LEAN NO HIRE|NO HIRE>",
+  "executiveSummary": "<2-3 sentence summary of the candidate's performance>",
+  "technicalEvaluation": {
+    "score": <0-10>,
+    "summary": "<1-2 sentences about system design skills>",
+    "strengths": ["<strength 1>", "<strength 2>"],
+    "weaknesses": ["<weakness 1>", "<weakness 2>"]
+  },
+  "communicationEvaluation": {
+    "score": <0-10>,
+    "summary": "<1-2 sentences about communication>",
+    "strengths": ["<strength 1>"],
+    "weaknesses": ["<weakness 1>"]
+  },
+  "problemSolvingEvaluation": {
+    "score": <0-10>,
+    "summary": "<1-2 sentences about design approach and trade-offs>",
+    "strengths": ["<strength 1>"],
+    "weaknesses": ["<weakness 1>"]
+  },
+  "finalFeedback": "<Constructive feedback for the candidate - what to improve>"
+}`
+          : `
 You are a senior technical interviewer at a top tech company (FAANG-level). Generate a comprehensive, professional interview evaluation report.
 
 ## INTERVIEW DATA
@@ -657,6 +766,16 @@ Return ONLY valid JSON with this exact structure:
 // ============================================================================
 
 export interface PracticeInterviewData extends InterviewReportData {
+  // Required for practice mode (overrides optional from base)
+  code: string;
+  language: string;
+  testResults: {
+    timestamp: number;
+    problemId: string;
+    testsPassed: number;
+    testsTotal: number;
+    details: Record<string, unknown>;
+  }[];
   companyId?: string;
   companyName?: string;
 }

@@ -12,15 +12,23 @@
  * - Seamless audio playback with pre-scheduling
  */
 
-import { INTERVIEW_TOOLS } from "./gemini-tools";
+import { INTERVIEW_TOOLS, SYSTEM_DESIGN_TOOLS, MINIMAL_SYSTEM_DESIGN_TOOLS } from "./gemini-tools";
 import { getSystemInstruction } from "./interviewer-prompt";
+import { getSystemDesignInstruction } from "./system-design-prompt";
+import { getSystemDesignTopic, type SystemDesignTopic } from "@/data/system-design-topics";
 
 // Audio sample rates per Gemini Live API spec
 const INPUT_SAMPLE_RATE = 16000;  // Input MUST be 16kHz
 const OUTPUT_SAMPLE_RATE = 24000; // Output is always 24kHz
 
-// Use gemini-2.5-flash-native-audio for Live API
-const MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025";
+// Available Live API models - switch between these to test performance
+const LIVE_API_MODELS = {
+  flash2exp: "models/gemini-2.0-flash-exp",  // Gemini 2.0 experimental (faster, may be less stable)
+  current: "models/gemini-2.5-flash-native-audio-preview-12-2025",  // Gemini 2.5 preview (original, works reliably)
+} as const;
+
+// Use the original model that was working (we'll optimize other areas instead)
+const MODEL = LIVE_API_MODELS.current;
 
 // WebSocket endpoint
 const WS_BASE_URL = "wss://generativelanguage.googleapis.com";
@@ -35,7 +43,7 @@ const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
 const POST_INTERRUPT_TIMEOUT_MS = 7000;
 
 // Interview mode type
-export type InterviewMode = 'real' | 'practice';
+export type InterviewMode = 'real' | 'practice' | 'system-design';
 
 // Problem context to send to Gemini directly at startup
 export interface ProblemContext {
@@ -63,6 +71,8 @@ export class GeminiLiveClient {
   private mediaStream: MediaStream | null = null;
   private interviewMode: InterviewMode = 'real';
   private problemContext: ProblemContext | null = null;
+  private systemDesignTopic: SystemDesignTopic | null = null;
+  private useFallbackTools = false; // If true, use INTERVIEW_TOOLS even for system design
 
   // Audio Playback Queue
   private audioQueue: Float32Array[] = [];
@@ -75,6 +85,9 @@ export class GeminiLiveClient {
   private retryAttempts = 0;
   private retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private isSetupComplete = false;
+  private isReconnection = false;
+  private reconnectionContext: string | null = null;
+  private isInterviewEnding = false;  // Flag to track intentional disconnection
 
   // Response tracking
   private lastResponseTime = 0;
@@ -106,6 +119,12 @@ export class GeminiLiveClient {
     console.log(`🔑 GeminiLiveClient API key: "${this.apiKey ? this.apiKey.substring(0, 10) + '...' + this.apiKey.substring(this.apiKey.length - 4) : 'EMPTY/UNDEFINED'}" (length: ${this.apiKey?.length ?? 0})`);
   }
 
+  /** Mark that the interview is ending (called before disconnect to prevent 1008 retry) */
+  markInterviewEnding() {
+    console.log("🏁 Interview marked as ending - will ignore 1008 errors");
+    this.isInterviewEnding = true;
+  }
+
   setInterviewMode(mode: InterviewMode) {
     this.interviewMode = mode;
   }
@@ -119,9 +138,23 @@ export class GeminiLiveClient {
     console.log(`📋 Problem context set: ${problem.title}`);
   }
 
+  setSystemDesignTopic(topicId: string) {
+    this.systemDesignTopic = getSystemDesignTopic(topicId) || null;
+    if (this.systemDesignTopic) {
+      console.log(`📐 System design topic set: ${this.systemDesignTopic.title}`);
+    }
+  }
+
+  setReconnectionContext(context: string) {
+    this.reconnectionContext = context;
+    this.isReconnection = true;
+    console.log(`🔄 Reconnection context set (${context.length} chars)`);
+  }
+
   async connect(isRetry = false) {
     if (!isRetry) {
       this.retryAttempts = 0;
+      this.isInterviewEnding = false;  // Reset flag on new connection
     }
 
     console.log(`🚀 Starting Gemini Live connection... ${isRetry ? `(retry ${this.retryAttempts}/${MAX_RETRY_ATTEMPTS})` : ''}`);
@@ -144,9 +177,14 @@ export class GeminiLiveClient {
       }
 
       // Build system instruction with problem context
-      let systemInstruction = getSystemInstruction(this.interviewMode);
-      if (this.problemContext) {
-        systemInstruction += this.buildProblemSection();
+      let systemInstruction: string;
+      if (this.interviewMode === 'system-design' && this.systemDesignTopic) {
+        systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
+      } else {
+        systemInstruction = getSystemInstruction(this.interviewMode as 'real' | 'practice');
+        if (this.problemContext) {
+          systemInstruction += this.buildProblemSection();
+        }
       }
 
       // Construct WebSocket URL with API key directly in query string
@@ -219,7 +257,7 @@ export class GeminiLiveClient {
           role: "user",
           parts: [{ text: systemInstruction }]
         },
-        tools: INTERVIEW_TOOLS,
+        tools: (this.interviewMode === 'system-design' && !this.useFallbackTools) ? SYSTEM_DESIGN_TOOLS : INTERVIEW_TOOLS,
         realtimeInputConfig: {
           // Ensure user speech during interruption is included in context
           // so the model responds to what the user said, not resuming its
@@ -248,11 +286,22 @@ export class GeminiLiveClient {
       }
     };
 
-    console.log("📤 Sending setup message...");
+    const toolSet = (this.interviewMode === 'system-design' && !this.useFallbackTools) ? 'SYSTEM_DESIGN_TOOLS' : 'INTERVIEW_TOOLS';
+    console.log("📤 Sending setup message...", {
+      mode: this.interviewMode,
+      toolSet,
+      fallback: this.useFallbackTools,
+      toolCount: (setupMessage.setup.tools[0] as any)?.functionDeclarations?.length,
+      toolNames: (setupMessage.setup.tools[0] as any)?.functionDeclarations?.map((f: any) => f.name),
+      promptLength: systemInstruction.length,
+    });
     this.ws.send(JSON.stringify(setupMessage));
   }
 
   disconnect() {
+    console.log("🔌 Disconnect called - setting interview ending flag");
+    this.isInterviewEnding = true;  // Mark this as intentional
+    
     if (this.retryTimeoutId) {
       clearTimeout(this.retryTimeoutId);
       this.retryTimeoutId = null;
@@ -409,6 +458,18 @@ export class GeminiLiveClient {
       this.isSetupComplete = true;
       this.startAudioInput();
       this.onSetupComplete();
+
+      // Inject reconnection context if this is a reconnection
+      if (this.isReconnection && this.reconnectionContext) {
+        console.log("🔄 Injecting context recovery message...");
+        // Use a small delay to ensure audio input is fully ready
+        setTimeout(() => {
+          if (this.reconnectionContext) {
+            this.sendText(this.reconnectionContext);
+            this.reconnectionContext = null; // Clear after sending
+          }
+        }, 500);
+      }
     }
 
     // Handle server content (audio/text/interruption/turnComplete)
@@ -508,7 +569,7 @@ export class GeminiLiveClient {
       const responses = await Promise.race([
         this.onToolsCall(functionCalls),
         new Promise<any[]>((_, reject) =>
-          setTimeout(() => reject(new Error("Tool execution timeout")), 30000)
+          setTimeout(() => reject(new Error("Tool execution timeout")), 10000)
         )
       ]);
 
@@ -558,7 +619,26 @@ export class GeminiLiveClient {
           : "Protocol error. Check API configuration.";
         break;
       case 1008:
-        errorMessage = "API key rejected or policy violation. Try regenerating your API key.";
+        // Check if this is an intentional disconnect (interview ending)
+        if (this.isInterviewEnding) {
+          console.log("✅ Connection closed gracefully during interview end (1008 is expected)");
+          this.onStatusChange('disconnected');
+          this.stopAudio();
+          return;
+        }
+        
+        console.warn("⚠️ 1008 close - reason:", event.reason || "(empty)", "mode:", this.interviewMode, "fallback:", this.useFallbackTools);
+        
+        // If system design mode failed with diagram tools, retry with INTERVIEW_TOOLS only
+        if (this.interviewMode === 'system-design' && !this.useFallbackTools) {
+          console.warn("🔄 System design tools rejected - retrying with standard tools (voice-only, no diagram)");
+          this.useFallbackTools = true;
+          this.retryTimeoutId = setTimeout(() => this.connect(true), 500);
+          return;
+        }
+        errorMessage = event.reason
+          ? `Policy violation: ${event.reason}`
+          : "API key rejected or policy violation. Try regenerating your API key.";
         break;
       case 1011:
         errorMessage = "Server error. The model may not be available.";

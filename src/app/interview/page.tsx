@@ -19,7 +19,7 @@ import { InterviewReportDialog } from "@/components/interview/InterviewReportDia
 import { PracticeReportDialog } from "@/components/practice/PracticeReportDialog";
 import { WorkspaceProgressIndicator } from "@/components/workspace/WorkspaceProgressIndicator";
 import { Timer } from "@/components/interview/Timer";
-import { Shield, GraduationCap } from "lucide-react";
+import { Shield, GraduationCap, Layers } from "lucide-react";
 import { PROBLEMS } from "@/data/problems";
 import { COMPANIES, NEETCODE_CATEGORIES } from "@/data/company-problems";
 import { generateTestCode } from "@/lib/test-runner";
@@ -29,6 +29,8 @@ import { Volume2, VolumeX } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import confetti from "canvas-confetti";
 import Link from "next/link";
+import { DiagramCanvas } from "@/components/diagram/DiagramCanvas";
+import { SystemDesignPanel } from "@/components/diagram/SystemDesignPanel";
 
 export default function InterviewPage() {
   const {
@@ -56,6 +58,7 @@ export default function InterviewPage() {
     interviewStartTime,
     language,
     setLanguage,
+    selectedTopicId,
   } = useInterviewStore();
 
   const [mounted, setMounted] = useState(false);
@@ -76,8 +79,19 @@ export default function InterviewPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  const isSystemDesign = interviewMode === 'system-design';
+
   // Initialize interview mode and problem
   useEffect(() => {
+    // System design mode: needs a topic selected
+    if (isSystemDesign) {
+      if (!selectedTopicId) {
+        // No topic selected, redirect to topic selection
+        window.location.href = '/system-design';
+      }
+      return;
+    }
+
     // If in practice mode but no company/problem selected, user navigated directly - reset to real mode
     if (interviewMode === 'practice' && (!selectedCompanyId || !currentProblemId)) {
       setInterviewMode('real');
@@ -92,7 +106,7 @@ export default function InterviewPage() {
       setCurrentProblemId(PROBLEMS[0].id);
       setCode(PROBLEMS[0].starterCode);
     }
-  }, [interviewMode, currentProblemId, selectedCompanyId, setCurrentProblemId, setCode, setInterviewMode, setSelectedCompanyId]);
+  }, [interviewMode, isSystemDesign, currentProblemId, selectedCompanyId, selectedTopicId, setCurrentProblemId, setCode, setInterviewMode, setSelectedCompanyId]);
 
   // Initialize workspace with progress tracking
   const initWorkspace = async () => {
@@ -166,6 +180,15 @@ export default function InterviewPage() {
   };
 
   useEffect(() => {
+    if (isSystemDesign) {
+      // System design mode: no sandbox needed, just start session
+      initSession().then(() => {
+        setWorkspaceStatus('ready');
+        startSession();
+      });
+      return;
+    }
+
     // Initialize session token first, then workspace
     initSession().then(() => initWorkspace());
 
@@ -331,12 +354,13 @@ export default function InterviewPage() {
   };
 
   const handleEndInterview = async () => {
-    // Stop Gemini Live first
-    if (agentDisconnect) {
-      agentDisconnect();
+    // Read agentDisconnect fresh from store to avoid stale closures
+    const agentDisconnectFn = useInterviewStore.getState().agentDisconnect;
+    if (agentDisconnectFn) {
+      agentDisconnectFn();
     }
 
-    // Delete the sandbox workspace
+    // Delete the sandbox workspace (only exists for coding modes)
     const wsId = useInterviewStore.getState().workspaceId;
     if (wsId) {
       try {
@@ -354,8 +378,9 @@ export default function InterviewPage() {
       }
     }
 
-    // Then show the report
     playSound('complete');
+
+    // Show the report dialog for all interview types
     setShowReport(true);
   };
 
@@ -391,14 +416,16 @@ export default function InterviewPage() {
         </Link>
         <div className="text-xs text-muted-foreground flex items-center gap-4">
           <Timer />
-          <select
-            value={language}
-            onChange={(e) => handleLanguageChange(e.target.value)}
-            className="h-7 px-2 rounded border border-border bg-background text-foreground text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
-          >
-            <option value="python">Python</option>
-            <option value="javascript">JavaScript</option>
-          </select>
+          {!isSystemDesign && (
+            <select
+              value={language}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+              className="h-7 px-2 rounded border border-border bg-background text-foreground text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="python">Python</option>
+              <option value="javascript">JavaScript</option>
+            </select>
+          )}
           <button
             onClick={toggleMute}
             className="p-1 rounded hover:bg-accent transition-colors"
@@ -413,7 +440,16 @@ export default function InterviewPage() {
               <GraduationCap className="w-3 h-3" /> Practice Mode
             </span>
           )}
-          {workspaceId ? (
+          {isSystemDesign && (
+            <span className="text-primary flex items-center gap-1 bg-primary/10 px-2 py-1 rounded">
+              <Layers className="w-3 h-3" /> System Design
+            </span>
+          )}
+          {isSystemDesign ? (
+            <span className="text-green-500 flex items-center gap-1">
+              <Layers className="w-3 h-3" /> Design Mode
+            </span>
+          ) : workspaceId ? (
             <span className="text-green-500 flex items-center gap-1">
               <Shield className="w-3 h-3" /> Shield Active
             </span>
@@ -426,68 +462,111 @@ export default function InterviewPage() {
       </header>
 
       <div className="flex-1 overflow-hidden">
-        <ResizablePanelGroup direction="horizontal">
-          {/* Left Panel: Problem Description */}
-          <ResizablePanel defaultSize={25} minSize={20}>
-            <ProblemDescription />
-          </ResizablePanel>
+        {isSystemDesign ? (
+          /* System Design Layout */
+          <ResizablePanelGroup direction="horizontal">
+            {/* Left Panel: Topic Info & Components Checklist */}
+            <ResizablePanel defaultSize={20} minSize={15}>
+              <SystemDesignPanel />
+            </ResizablePanel>
 
-          <ResizableHandle />
+            <ResizableHandle />
 
-          {/* Center Panel: Editor (top) & Console (bottom) */}
-          <ResizablePanel defaultSize={50} minSize={30}>
-            <div className="flex flex-col h-full">
-              {/* Code Editor - Top 70% */}
-              <div className="flex-[7] min-h-0 overflow-hidden">
-                <CodeEditor
-                  language={language}
-                  initialCode={code}
-                  onChange={(val) => setCode(val || "")}
-                  onRun={() => handleRun(code)}
-                  isRunning={isRunning}
+            {/* Center Panel: Architecture Diagram */}
+            <ResizablePanel defaultSize={50} minSize={30}>
+              <DiagramCanvas />
+            </ResizablePanel>
+
+            <ResizableHandle />
+
+            {/* Right Panel: Agent & Transcript */}
+            <ResizablePanel defaultSize={30} minSize={20} className="bg-card border-l">
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="p-4 border-b shrink-0">
+                  <InterviewAgent />
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-hidden border-b">
+                  <TranscriptPanel />
+                </div>
+
+                <Controls
+                  onRun={() => {}}
+                  onAutoFix={() => {}}
+                  onEndInterview={handleEndInterview}
+                  isRunning={false}
+                  isFixing={false}
+                  hasError={false}
+                  hideCodeActions
                 />
               </div>
-              {/* Console Panel - Bottom 30% */}
-              <div className="flex-[3] min-h-0 overflow-hidden">
-                <ConsolePanel output={consoleOutput} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          /* Standard Coding Interview Layout */
+          <ResizablePanelGroup direction="horizontal">
+            {/* Left Panel: Problem Description */}
+            <ResizablePanel defaultSize={25} minSize={20}>
+              <ProblemDescription />
+            </ResizablePanel>
+
+            <ResizableHandle />
+
+            {/* Center Panel: Editor (top) & Console (bottom) */}
+            <ResizablePanel defaultSize={50} minSize={30}>
+              <div className="flex flex-col h-full">
+                {/* Code Editor - Top 70% */}
+                <div className="flex-[7] min-h-0 overflow-hidden">
+                  <CodeEditor
+                    language={language}
+                    initialCode={code}
+                    onChange={(val) => setCode(val || "")}
+                    onRun={() => handleRun(code)}
+                    isRunning={isRunning}
+                  />
+                </div>
+                {/* Console Panel - Bottom 30% */}
+                <div className="flex-[3] min-h-0 overflow-hidden">
+                  <ConsolePanel output={consoleOutput} />
+                </div>
               </div>
-            </div>
-          </ResizablePanel>
+            </ResizablePanel>
 
-          <ResizableHandle />
+            <ResizableHandle />
 
-          {/* Right Panel: Agent & Controls */}
-          <ResizablePanel defaultSize={35} minSize={20} className="bg-card border-l">
-            <div className="flex flex-col h-full overflow-hidden">
-              <div className="p-4 border-b shrink-0">
-                <InterviewAgent />
+            {/* Right Panel: Agent & Controls */}
+            <ResizablePanel defaultSize={35} minSize={20} className="bg-card border-l">
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="p-4 border-b shrink-0">
+                  <InterviewAgent />
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-hidden border-b">
+                  <TranscriptPanel />
+                </div>
+
+                <Controls
+                  onRun={() => handleRun(code)}
+                  onAutoFix={handleAutoFix}
+                  onEndInterview={handleEndInterview}
+                  isRunning={isRunning}
+                  isFixing={isFixing}
+                  hasError={!!lastError}
+                />
               </div>
-
-              <div className="flex-1 min-h-0 overflow-hidden border-b">
-                <TranscriptPanel />
-              </div>
-
-              <Controls
-                onRun={() => handleRun(code)}
-                onAutoFix={handleAutoFix}
-                onEndInterview={handleEndInterview}
-                isRunning={isRunning}
-                isFixing={isFixing}
-                hasError={!!lastError}
-              />
-            </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        )}
       </div>
 
       {interviewMode === 'practice' ? (
         <PracticeReportDialog open={showReport} onOpenChange={setShowReport} />
-      ) : (
+      ) : !isSystemDesign ? (
         <InterviewReportDialog open={showReport} onOpenChange={setShowReport} />
-      )}
+      ) : null}
 
       {/* Workspace Progress Indicator */}
-      <WorkspaceProgressIndicator onRetry={initWorkspace} />
+      {!isSystemDesign && <WorkspaceProgressIndicator onRetry={initWorkspace} />}
     </div>
   );
 }

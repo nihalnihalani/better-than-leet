@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Logo } from "@/components/ui/Logo";
-import { Mic, Sparkles, Lock, GraduationCap, ListChecks, MessageSquare, BarChart3, ArrowRight } from "lucide-react";
+import { Mic, Sparkles, Lock, GraduationCap, Layers, ListChecks, MessageSquare, BarChart3, ArrowRight } from "lucide-react";
 import Image from "next/image";
 import { StartInterviewButton } from "@/components/interview/StartInterviewButton";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -51,6 +51,12 @@ export default function Home() {
               <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
                 <GraduationCap className="mr-2 w-5 h-5" />
                 Practice Mode
+              </Button>
+            </Link>
+            <Link href="/system-design">
+              <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
+                <Layers className="mr-2 w-5 h-5" />
+                System Design
               </Button>
             </Link>
             <Link href="https://github.com/daytonaio/sdk" target="_blank">
