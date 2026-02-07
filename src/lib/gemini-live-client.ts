@@ -228,8 +228,8 @@ export class GeminiLiveClient {
           turnCoverage: "TURN_INCLUDES_ALL_INPUT",
           automaticActivityDetection: {
             disabled: false,
-            // Lower sensitivity avoids false triggers from background noise
-            startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+            // High sensitivity detects interruptions faster
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
             // Lower end sensitivity lets user pause mid-sentence without
             // the model jumping in
             endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
@@ -427,7 +427,9 @@ export class GeminiLiveClient {
           if (this.pendingUserInput && this._isConnected && this.ws) {
             console.log("⚠️ No model response after interruption - prompting to speak");
             this.onNoResponse();
-            this.promptToSpeak();
+            // Use interruption-aware prompt so model responds to what the
+            // user said rather than resuming its previous train of thought
+            this.promptToSpeak("[The candidate interrupted you and spoke to you. DO NOT continue your previous response. Respond to what they just said. If you couldn't understand them, ask them to repeat.]");
           }
         }, POST_INTERRUPT_TIMEOUT_MS);
       }
