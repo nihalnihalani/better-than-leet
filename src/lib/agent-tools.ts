@@ -331,5 +331,23 @@ export const getAgentTools = () => ({
             return store.getIntegrityReport();
         }
         return "Integrity monitoring not available.";
+    }),
+
+    end_interview: wrapTool('end_interview', async () => {
+        console.log("🏁 Agent triggered end_interview");
+        const store = useInterviewStore.getState();
+        const { onEndInterview } = store;
+
+        if (!onEndInterview) {
+            return "End interview handler not available.";
+        }
+
+        // Delay slightly so the tool response is sent back to Gemini
+        // before we tear down the connection
+        setTimeout(() => {
+            onEndInterview();
+        }, 1500);
+
+        return "Interview ending. The report will be generated now. Say your final goodbye to the candidate.";
     })
 });

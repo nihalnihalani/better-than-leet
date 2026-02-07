@@ -51,6 +51,7 @@ export default function InterviewPage() {
     setSelectedCompanyId,
     customProblems,
     agentDisconnect,
+    setOnEndInterview,
     startSession,
     interviewStartTime,
     language,
@@ -357,6 +358,12 @@ export default function InterviewPage() {
     playSound('complete');
     setShowReport(true);
   };
+
+  // Register end-interview callback so the AI agent can trigger it via tool
+  useEffect(() => {
+    setOnEndInterview(() => handleEndInterview);
+    return () => setOnEndInterview(null);
+  }, [setOnEndInterview]);
 
   const handleLanguageChange = (newLang: string) => {
     if (newLang === language) return;
