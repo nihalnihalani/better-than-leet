@@ -221,8 +221,22 @@ export class GeminiLiveClient {
         },
         tools: INTERVIEW_TOOLS,
         realtimeInputConfig: {
+          // Ensure user speech during interruption is included in context
+          // so the model responds to what the user said, not resuming its
+          // previous train of thought
+          activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+          turnCoverage: "TURN_INCLUDES_ALL_INPUT",
           automaticActivityDetection: {
-            disabled: false
+            disabled: false,
+            // Lower sensitivity avoids false triggers from background noise
+            startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+            // Lower end sensitivity lets user pause mid-sentence without
+            // the model jumping in
+            endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+            // Include a small audio buffer before detected speech start
+            prefixPaddingMs: 20,
+            // Wait 500ms of silence before considering speech finished
+            silenceDurationMs: 500
           }
         }
       }
