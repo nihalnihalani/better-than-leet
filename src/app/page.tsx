@@ -9,11 +9,11 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-purple-100">
+    <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-purple-100 dark:selection:bg-purple-900/50">
       {/* Background Gradients */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 md:-top-[20%] left-[20%] w-[500px] h-[500px] bg-purple-100 rounded-full blur-[120px] opacity-60" />
-        <div className="absolute bottom-0 md:-bottom-[20%] right-[20%] w-[500px] h-[500px] bg-blue-100 rounded-full blur-[120px] opacity-60" />
+        <div className="absolute top-0 md:-top-[20%] left-[20%] w-[500px] h-[500px] bg-purple-100 dark:bg-purple-900 rounded-full blur-[120px] opacity-60 dark:opacity-20" />
+        <div className="absolute bottom-0 md:-bottom-[20%] right-[20%] w-[500px] h-[500px] bg-blue-100 dark:bg-blue-900 rounded-full blur-[120px] opacity-60 dark:opacity-20" />
       </div>
 
       <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
@@ -35,12 +35,12 @@ export default function Home() {
         <div className="space-y-6 flex flex-col items-center max-w-4xl mx-auto">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight flex flex-col items-center gap-2 pb-2">
             <span className="animate-slide-up-fade">Meet <span className="animate-color-wave font-extrabold tracking-tight">Alexis</span></span>
-            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground font-normal">
+            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground dark:text-foreground/70 font-normal">
               Your AI Technical Interviewer
             </span>
           </h1>
 
-          <p className="text-xl text-muted-foreground max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
+          <p className="text-xl text-muted-foreground dark:text-foreground/60 max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
             Experience the future of technical hiring with a voice-first AI agent powered by Gemini 3 Pro.
             Real-time coding, deep analysis, and instant feedback in a secure Daytona sandbox.
           </p>
@@ -63,10 +63,10 @@ export default function Home() {
 
         {/* Feature Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-6xl mt-20 text-left">
-          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60">
+          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60 dark:border-border">
             <CardHeader>
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Mic className="w-6 h-6 text-blue-500" />
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Mic className="w-6 h-6 text-blue-500 dark:text-blue-400" />
               </div>
               <CardTitle className="text-xl">Voice-First AI</CardTitle>
               <CardDescription className="text-base">
@@ -75,10 +75,10 @@ export default function Home() {
             </CardHeader>
           </Card>
 
-          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60">
+          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60 dark:border-border">
             <CardHeader>
-              <div className="w-12 h-12 rounded-2xl bg-green-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Lock className="w-6 h-6 text-green-500" />
+              <div className="w-12 h-12 rounded-2xl bg-green-50 dark:bg-green-950 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Lock className="w-6 h-6 text-green-500 dark:text-green-400" />
               </div>
               <CardTitle className="text-xl">Secure Sandbox</CardTitle>
               <CardDescription className="text-base">
@@ -87,10 +87,10 @@ export default function Home() {
             </CardHeader>
           </Card>
 
-          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60">
+          <Card className="hover:shadow-lg transition-all duration-300 group border-muted/60 dark:border-border">
             <CardHeader>
-              <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                <Sparkles className="w-6 h-6 text-purple-500" />
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
+                <Sparkles className="w-6 h-6 text-purple-500 dark:text-purple-400" />
               </div>
               <CardTitle className="text-xl">Gemini 3 Pro Analysis</CardTitle>
               <CardDescription className="text-base">
@@ -110,7 +110,7 @@ export default function Home() {
               { step: 3, icon: BarChart3, title: "Get Your Report", desc: "Receive detailed performance analysis and actionable feedback." },
             ].map((item, i) => (
               <div key={i} className="flex flex-col items-center md:items-start gap-3 text-center md:text-left relative">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                <div className="w-10 h-10 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center text-primary font-bold text-sm">
                   {item.step}
                 </div>
                 <item.icon className="w-8 h-8 text-muted-foreground" />
@@ -140,7 +140,7 @@ export default function Home() {
                 alt={logo.alt}
                 width={logo.w}
                 height={40}
-                className="h-8 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300"
+                className="h-8 w-auto object-contain grayscale hover:grayscale-0 transition-all duration-300 dark:invert dark:hover:invert-0"
               />
             ))}
           </div>

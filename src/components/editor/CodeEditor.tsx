@@ -99,11 +99,11 @@ export function CodeEditor({
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-md overflow-hidden bg-[#1e1e1e]">
-      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333]">
-        <span className="text-sm text-gray-400 font-mono">{language}</span>
+    <div className="flex flex-col h-full border rounded-md overflow-hidden bg-card">
+      <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
+        <span className="text-sm text-muted-foreground font-mono">{language}</span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500 hidden sm:inline">
+          <span className="text-xs text-muted-foreground hidden sm:inline">
             {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter to run
           </span>
           <Button

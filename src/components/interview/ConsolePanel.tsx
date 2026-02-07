@@ -25,7 +25,7 @@ const LogColor = (type: LogType) => {
         case 'stderr': return 'text-red-400';
         case 'system': return 'text-blue-400';
         case 'agent': return 'text-purple-300';
-        default: return 'text-gray-300';
+        default: return 'text-foreground/80';
     }
 };
 
@@ -37,8 +37,8 @@ export function ConsolePanel({ output }: ConsolePanelProps) {
   }, [output]);
 
   return (
-    <div className="flex flex-col h-full bg-[#0c0c0c] border-t border-gray-800 font-mono text-sm shadow-inner">
-      <div className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] border-b border-gray-800 text-xs font-semibold text-gray-400 select-none">
+    <div className="flex flex-col h-full bg-background border-t border-border font-mono text-sm shadow-inner">
+      <div className="flex items-center gap-2 px-4 py-2 bg-card border-b border-border text-xs font-semibold text-muted-foreground select-none">
         <Terminal className="w-3 h-3" />
         Console
         <div className="ml-auto flex gap-2">
@@ -47,7 +47,7 @@ export function ConsolePanel({ output }: ConsolePanelProps) {
       </div>
       <pre className="flex-1 p-4 overflow-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent font-mono">
         {output.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-700 opacity-50">
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-50">
             <Cpu className="w-12 h-12 mb-2" />
             <span className="text-xs">Awaiting Input...</span>
           </div>
