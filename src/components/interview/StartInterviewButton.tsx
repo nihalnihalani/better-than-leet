@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { useInterviewStore } from '@/lib/store';
 import { ArrowRight } from 'lucide-react';
-import { PROBLEMS } from '@/data/problems';
+import { getAllCompanyProblems } from '@/data/company-problems';
 
 interface StartInterviewButtonProps {
   size?: 'default' | 'sm' | 'lg' | 'icon';
@@ -22,8 +22,9 @@ export function StartInterviewButton({ size = 'lg', className, variant = 'defaul
     setInterviewMode('real');
     setSelectedCompanyId(null);
 
-    // Always start with Two Sum problem (first problem in PROBLEMS array)
-    const twoSumProblem = PROBLEMS[0]; // Two Sum is always first
+    // Always start with Two Sum problem - use the first Two Sum from company problems
+    const allProblems = getAllCompanyProblems();
+    const twoSumProblem = allProblems.find(p => p.title === 'Two Sum') || allProblems[0];
     setCurrentProblemId(twoSumProblem.id);
     setCode(twoSumProblem.starterCode);
 
