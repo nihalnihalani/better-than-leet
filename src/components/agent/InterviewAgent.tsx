@@ -8,7 +8,7 @@ import { ThinkingIndicator } from './ThinkingIndicator';
 import { Mic, MicOff, GraduationCap } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { getAgentTools } from '@/lib/agent-tools';
-import { GeminiLiveClient, ConnectionStatus, InterviewMode, ProblemContext } from '@/lib/gemini-live-client';
+import { InterviewLiveClient, ConnectionStatus, InterviewMode, ProblemContext } from '@/lib/interview-live-client';
 import { PROBLEMS } from '@/data/problems';
 import { COMPANIES } from '@/data/company-problems';
 import { authFetch } from '@/lib/api-client';
@@ -24,7 +24,7 @@ export function InterviewAgent() {
     const [volume, setVolume] = useState(0);
     const [isModelSpeaking, setIsModelSpeaking] = useState(false);
     const [wasInterrupted, setWasInterrupted] = useState(false);
-    const clientRef = useRef<GeminiLiveClient | null>(null);
+    const clientRef = useRef<InterviewLiveClient | null>(null);
 
     // Tool handler - always gets fresh state to avoid closure issues
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
@@ -108,7 +108,7 @@ export function InterviewAgent() {
             // Create client with current interview mode (real or practice)
             const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
             console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
-            const client = new GeminiLiveClient(apiKey.trim(), mode);
+            const client = new InterviewLiveClient(apiKey.trim(), mode);
 
         client.onStatusChange = (s) => setStatus(s);
         client.onToolsCall = handleToolsCall;
@@ -122,12 +122,14 @@ export function InterviewAgent() {
             setCurrentAction('');
         };
         client.onMessage = (msg) => {
-             // Handle text transcript updates from model
-             useInterviewStore.getState().addTranscriptMessage('agent', msg, 'audio');
+            // Handle text transcript updates from model
+            useInterviewStore.getState().addTranscriptMessage('agent', msg, 'audio');
+            console.log('📝 Agent message added to transcript:', msg.substring(0, 100));
         };
         client.onUserTranscript = (text) => {
             // Handle user speech transcription from Gemini
             useInterviewStore.getState().addTranscriptMessage('user', text, 'audio');
+            console.log('🎤 User transcript received:', text.substring(0, 100));
         };
         // New callbacks for natural conversation flow
         client.onInterrupted = () => {

@@ -13,10 +13,7 @@
  */
 
 import { INTERVIEW_TOOLS } from "./gemini-tools";
-import { SYSTEM_DESIGN_TOOLS, SYSTEM_DESIGN_TOOLS_FALLBACK } from "./system-design-tools";
 import { getSystemInstruction } from "./interviewer-prompt";
-import { getSystemDesignInstruction } from "./system-design-prompt";
-import { getSystemDesignTopic, type SystemDesignTopic } from "@/data/system-design-topics";
 
 // Audio sample rates per Gemini Live API spec
 const INPUT_SAMPLE_RATE = 16000;  // Input MUST be 16kHz
@@ -38,7 +35,7 @@ const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
 const POST_INTERRUPT_TIMEOUT_MS = 7000;
 
 // Interview mode type
-export type InterviewMode = 'real' | 'practice' | 'system-design';
+export type InterviewMode = 'real' | 'practice';
 
 // Problem context to send to Gemini directly at startup
 export interface ProblemContext {
@@ -55,7 +52,7 @@ export interface ProblemContext {
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-export class GeminiLiveClient {
+export class InterviewLiveClient {
   // WebSocket
   private ws: WebSocket | null = null;
   private _isConnected = false;
@@ -66,9 +63,6 @@ export class GeminiLiveClient {
   private mediaStream: MediaStream | null = null;
   private interviewMode: InterviewMode = 'real';
   private problemContext: ProblemContext | null = null;
-  private systemDesignTopic: SystemDesignTopic | null = null;
-  private useFallbackTools = false;
-  private isInterviewEnding = false;
 
   // Audio Playback Queue
   private audioQueue: Float32Array[] = [];
@@ -92,9 +86,6 @@ export class GeminiLiveClient {
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private highPassFilter: BiquadFilterNode | null = null;
   private lowPassFilter: BiquadFilterNode | null = null;
-
-  // Microphone mute state
-  private micMuted = false;
 
   // Callbacks
   public onStatusChange: (status: ConnectionStatus) => void = () => {};
@@ -128,19 +119,6 @@ export class GeminiLiveClient {
     console.log(`📋 Problem context set: ${problem.title}`);
   }
 
-  setSystemDesignTopic(topicId: string) {
-    this.systemDesignTopic = getSystemDesignTopic(topicId) || null;
-    if (this.systemDesignTopic) {
-      console.log(`📐 System design topic set: ${this.systemDesignTopic.title}`);
-    }
-  }
-
-  /** Mark that the interview is ending (called before disconnect to prevent 1008 retry) */
-  markInterviewEnding() {
-    console.log("🏁 Interview marked as ending - will ignore 1008 errors");
-    this.isInterviewEnding = true;
-  }
-
   async connect(isRetry = false) {
     if (!isRetry) {
       this.retryAttempts = 0;
@@ -165,17 +143,10 @@ export class GeminiLiveClient {
         // permissions.query may not be supported, continue anyway
       }
 
-      // Build system instruction based on interview mode
-      let systemInstruction: string;
-      if (this.interviewMode === 'system-design' && this.systemDesignTopic) {
-        systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
-      } else {
-        // For non-system-design modes, use the standard interviewer prompt
-        const mode = this.interviewMode === 'system-design' ? 'real' : this.interviewMode;
-        systemInstruction = getSystemInstruction(mode);
-        if (this.problemContext) {
-          systemInstruction += this.buildProblemSection();
-        }
+      // Build system instruction with problem context
+      let systemInstruction = getSystemInstruction(this.interviewMode);
+      if (this.problemContext) {
+        systemInstruction += this.buildProblemSection();
       }
 
       // Construct WebSocket URL with API key directly in query string
@@ -248,7 +219,7 @@ export class GeminiLiveClient {
           role: "user",
           parts: [{ text: systemInstruction }]
         },
-        tools: (this.interviewMode === 'system-design' && !this.useFallbackTools) ? SYSTEM_DESIGN_TOOLS : (this.useFallbackTools ? SYSTEM_DESIGN_TOOLS_FALLBACK : INTERVIEW_TOOLS),
+        tools: INTERVIEW_TOOLS,
         realtimeInputConfig: {
           // Ensure user speech during interruption is included in context
           // so the model responds to what the user said, not resuming its
@@ -257,8 +228,8 @@ export class GeminiLiveClient {
           turnCoverage: "TURN_INCLUDES_ALL_INPUT",
           automaticActivityDetection: {
             disabled: false,
-            // Lower sensitivity to ignore background noise
-            startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+            // High sensitivity detects interruptions faster
+            startOfSpeechSensitivity: "START_SENSITIVITY_HIGH",
             // Lower end sensitivity lets user pause mid-sentence without
             // the model jumping in
             endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
@@ -343,16 +314,6 @@ export class GeminiLiveClient {
 
   isConnected(): boolean {
     return this._isConnected && this.ws !== null;
-  }
-
-  toggleMicMute(): boolean {
-    this.micMuted = !this.micMuted;
-    console.log(`🎤 Microphone ${this.micMuted ? 'muted' : 'unmuted'}`);
-    return this.micMuted;
-  }
-
-  isMicMuted(): boolean {
-    return this.micMuted;
   }
 
   promptToSpeak(context?: string) {
@@ -452,11 +413,6 @@ export class GeminiLiveClient {
 
     // Handle server content (audio/text/interruption/turnComplete)
     if (msg.serverContent) {
-      // Debug: log all serverContent keys to find output transcription
-      if (Object.keys(msg.serverContent).length > 0) {
-        console.log('🔍 serverContent keys:', Object.keys(msg.serverContent));
-      }
-
       const wasInterrupted = !!msg.serverContent.interrupted;
 
       if (wasInterrupted) {
@@ -508,12 +464,6 @@ export class GeminiLiveClient {
         this.onUserTranscript(msg.serverContent.inputTranscript);
       }
 
-      // Handle model speech transcription from Gemini
-      if (msg.serverContent.outputTranscript) {
-        console.log('📝 Output transcript received:', msg.serverContent.outputTranscript.substring(0, 100));
-        this.onMessage(msg.serverContent.outputTranscript);
-      }
-
       if (msg.serverContent.modelTurn) {
         // Model is responding - clear any pending nudge timer
         this.pendingUserInput = false;
@@ -534,33 +484,12 @@ export class GeminiLiveClient {
           }
           if (part.text) {
             hasTextResponse = true;
-            // Store text but don't send to onMessage yet
-            // We'll only use text that accompanies audio (actual speech)
+            this.onMessage(part.text);
           }
         }
 
-        // Only capture text responses that have audio (actual speech)
-        // Text-only responses (audio=false, text=true) are internal reasoning
         if (hasAudioResponse || hasTextResponse) {
           console.log(`📤 Model response: audio=${hasAudioResponse}, text=${hasTextResponse}`);
-
-          if (hasTextResponse && !hasAudioResponse && this.interviewMode === 'system-design') {
-            console.warn('⚠️ Ignoring text-only response (internal reasoning) in system-design mode');
-          }
-        }
-
-        // For system-design mode: only capture text with audio (to avoid internal reasoning)
-        // For interview modes: capture all text (including text-only responses)
-        const shouldCaptureText = this.interviewMode === 'system-design'
-          ? hasAudioResponse
-          : (hasAudioResponse || hasTextResponse);
-
-        if (shouldCaptureText) {
-          for (const part of parts) {
-            if (part.text) {
-              this.onMessage(part.text);
-            }
-          }
         }
       }
     }
@@ -629,16 +558,7 @@ export class GeminiLiveClient {
           : "Protocol error. Check API configuration.";
         break;
       case 1008:
-        // If system design mode failed with diagram tools, retry with fallback
-        if (this.interviewMode === 'system-design' && !this.useFallbackTools) {
-          console.warn("⚠️ System design tools rejected with 1008 - retrying with fallback tools");
-          this.useFallbackTools = true;
-          this.retryAttempts = 0; // Reset retry counter for fallback attempt
-          shouldRetry = true;
-          errorMessage = ""; // Don't show error, we're retrying
-        } else {
-          errorMessage = "API key rejected or policy violation. Try regenerating your API key.";
-        }
+        errorMessage = "API key rejected or policy violation. Try regenerating your API key.";
         break;
       case 1011:
         errorMessage = "Server error. The model may not be available.";
@@ -722,9 +642,9 @@ ${p.starterCode}
         audio: {
           channelCount: 1,
           sampleRate: { ideal: INPUT_SAMPLE_RATE },
-          echoCancellation: true,  // Required - reduces echo feedback
-          noiseSuppression: true,  // Required - filters background noise
-          autoGainControl: true,   // Required - normalizes volume levels
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true },
         },
       });
 
@@ -769,12 +689,6 @@ ${p.starterCode}
         if (!this.ws || !this._isConnected || !this.isSetupComplete) return;
 
         const inputData = e.inputBuffer.getChannelData(0);
-
-        // If microphone is muted, don't process or send audio
-        // (also don't show volume to avoid triggering UI interruption logic)
-        if (this.micMuted) {
-          return;
-        }
 
         // Calculate input volume for visualization
         let sum = 0;

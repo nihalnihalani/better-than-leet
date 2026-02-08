@@ -33,9 +33,16 @@ export default function Home() {
 
         {/* Hero Section */}
         <div className="space-y-6 flex flex-col items-center max-w-4xl mx-auto">
+          {/* Disruptive Tagline */}
+          <div className="animate-slide-up-fade opacity-0" style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}>
+            <p className="text-lg md:text-xl text-red-500 dark:text-red-400 font-semibold tracking-wide">
+              Traditional Interviews Are Dead.
+            </p>
+          </div>
+
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight flex flex-col items-center gap-2 pb-2">
-            <span className="animate-slide-up-fade">Meet <span className="animate-color-wave font-extrabold tracking-tight">Alexis</span></span>
-            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground dark:text-foreground/70 font-normal">
+            <span className="animate-slide-up-fade" style={{ animationDelay: '200ms' }}>Meet <span className="animate-color-wave font-extrabold tracking-tight">Alexis</span></span>
+            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground dark:text-foreground/70 font-normal" style={{ animationDelay: '400ms' }}>
               Your AI Technical Interviewer
             </span>
           </h1>
