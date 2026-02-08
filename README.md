@@ -1,6 +1,8 @@
-# 🎙️ DAYTONA Interview Sandbox
+# 🎙️ BetterThanLeet
 
-> **"The AI interviewer that watches you code, spots when you're taking a suboptimal approach, and asks exactly the question a senior engineer would ask—all through voice."**
+> **"LeetCode can't ask follow-up questions. Alexis can."**
+>
+> The AI interviewer that watches you code, spots when you're taking a suboptimal approach, and asks exactly the question a senior engineer would ask—all through voice.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
@@ -11,7 +13,7 @@
 
 Hiring software engineers is expensive and high-friction. Traditional coding tests are silent, isolated experiences that fail to capture a candidate's communication skills or problem-solving process.
 
-**DAYTONA Interview Sandbox** changes this by creating an **interactive, voice-guided technical interview**. It combines:
+**BetterThanLeet** changes this by creating an **interactive, voice-guided technical interview**. It combines:
 - **Daytona** for a real, secure coding environment.
 - **ElevenLabs** for a natural, conversational AI interviewer.
 - **CodeRabbit & Gemini 3 Pro** for deep, real-time code analysis.
@@ -129,8 +131,8 @@ A detailed overview of the codebase organization:
 
 1.  **Clone the repository**:
     ```bash
-    git clone https://github.com/nihalnihalani/DAYTONA-InterviewSandBox.git
-    cd DAYTONA-InterviewSandBox
+    git clone https://github.com/nihalnihalani/BetterThanLeet.git
+    cd BetterThanLeet
     ```
 
 2.  **Install dependencies**:
@@ -212,4 +214,4 @@ NEXT_PUBLIC_USE_MOCK_CODERABBIT=true
 
 ---
 
-*Built for the Daytona Hackathon.*
+*Built for the Better Hack hackathon. Traditional interviews are dead.*

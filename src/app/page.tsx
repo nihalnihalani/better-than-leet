@@ -20,7 +20,7 @@ export default function Home() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="font-bold text-xl flex items-center gap-2">
             <Logo size={32} />
-            Alexis
+            BetterThanLeet
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -41,15 +41,15 @@ export default function Home() {
           </div>
 
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight flex flex-col items-center gap-2 pb-2">
-            <span className="animate-slide-up-fade" style={{ animationDelay: '200ms' }}>Meet <span className="animate-color-wave font-extrabold tracking-tight">Alexis</span></span>
+            <span className="animate-slide-up-fade" style={{ animationDelay: '200ms' }}>Meet <span className="animate-color-wave font-extrabold tracking-tight">BetterThanLeet</span></span>
             <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground dark:text-foreground/70 font-normal" style={{ animationDelay: '400ms' }}>
-              Your AI Technical Interviewer
+              Your AI Technical Interviewer, Alexis
             </span>
           </h1>
 
           <p className="text-xl text-muted-foreground dark:text-foreground/60 max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
-            Experience the future of technical hiring with a voice-first AI agent powered by Gemini 3 Pro.
-            Real-time coding, deep analysis, and instant feedback in a secure Daytona sandbox.
+            LeetCode can't ask follow-up questions. Alexis can. Experience voice-first technical interviews
+            powered by Gemini 3 Pro with real-time coding and instant feedback.
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 animate-slide-up-fade" style={{ animationDelay: '600ms' }}>

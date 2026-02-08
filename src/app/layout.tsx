@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Alexis - AI Technical Interviewer",
-  description: "Experience the future of technical hiring with a voice-first AI agent. Real-time coding, deep analysis, and instant feedback.",
+  title: "BetterThanLeet - AI Technical Interviewer",
+  description: "LeetCode can't ask follow-up questions. Alexis can. Experience voice-first technical interviews with real-time coding and instant feedback.",
 };
 
 export default function RootLayout({
