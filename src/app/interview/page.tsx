@@ -84,6 +84,19 @@ export default function InterviewPage() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Integrity tracking (real AND practice modes - not system-design)
+  useEffect(() => {
+    if (isSystemDesign) return; // Skip for system-design only
+
+    const handleBlur = () => {
+      useInterviewStore.getState().addBlurEvent();
+      console.log('⚠️ User switched tabs during interview');
+    };
+
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [isSystemDesign]);
+
   // Initialize interview mode and problem (CODING INTERVIEW ONLY)
   useEffect(() => {
     // Skip for system design mode

@@ -31,19 +31,21 @@ export function CodeEditor({
   const [code, setCode] = useState(initialCode);
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const onRunRef = useRef(onRun);
-  const { addBlurEvent, addPasteEvent } = useInterviewStore();
+  const { addBlurEvent, addPasteEvent, interviewMode } = useInterviewStore();
 
   // Keep onRun ref current to avoid stale closure in Monaco action
   useEffect(() => {
     onRunRef.current = onRun;
   }, [onRun]);
 
-  // Tab switching detection via visibility change
+  // Tab switching detection via visibility change (real + practice, not system-design)
   useEffect(() => {
+    if (interviewMode === 'system-design') return; // Skip for system-design only
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
         addBlurEvent();
-        console.log("Tab focus lost - Integrity Check");
+        console.log("⚠️ Tab focus lost - Integrity Check");
       }
     };
 
@@ -51,7 +53,7 @@ export function CodeEditor({
     return () => {
       window.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [addBlurEvent]);
+  }, [addBlurEvent, interviewMode]);
 
   // Handle Monaco editor mount and attach paste event listener
   const handleEditorMount = (editorInstance: editor.IStandaloneCodeEditor, monaco: Monaco) => {
@@ -70,7 +72,7 @@ export function CodeEditor({
       },
     });
 
-    // Use Monaco's native onDidPaste event for accurate paste detection
+    // Use Monaco's native onDidPaste event for accurate paste detection (real + practice, not system-design)
     editorInstance.onDidPaste((e) => {
       const pastedTextLength = e.range.endColumn - e.range.startColumn +
         (e.range.endLineNumber - e.range.startLineNumber) * 50; // Approximate length for multi-line pastes
@@ -81,9 +83,11 @@ export function CodeEditor({
         const pastedText = model.getValueInRange(e.range);
         const actualLength = pastedText.length;
 
-        if (actualLength >= PASTE_CHAR_THRESHOLD) {
+        // Track in both real and practice modes
+        const currentMode = useInterviewStore.getState().interviewMode;
+        if (actualLength >= PASTE_CHAR_THRESHOLD && currentMode !== 'system-design') {
           addPasteEvent(actualLength);
-          console.log(`Paste detected - ${actualLength} characters`);
+          console.log(`⚠️ Paste detected - ${actualLength} characters`);
         }
       }
     });
