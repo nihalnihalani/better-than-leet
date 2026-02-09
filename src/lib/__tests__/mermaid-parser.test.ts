@@ -2,6 +2,7 @@
  * Tests for Mermaid parser utilities
  */
 
+import { describe, it, expect } from 'vitest';
 import { extractMermaidBlocks, validateMermaidSyntax, countMermaidComponents } from '../mermaid-parser';
 
 describe('Mermaid Parser', () => {
