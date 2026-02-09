@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useSystemDesignStore } from '@/lib/system-design-store';
 import { getSystemDesignTopic } from '@/data/system-design-topics';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -7,16 +8,70 @@ import { CheckCircle2, Circle, Layers } from 'lucide-react';
 import { countMermaidComponents } from '@/lib/mermaid-parser';
 
 const PHASES = [
-  { id: 'requirements', label: 'Requirements' },
-  { id: 'high-level', label: 'High-Level Design' },
-  { id: 'deep-dive', label: 'Deep Dive' },
-  { id: 'scaling', label: 'Scaling' },
-  { id: 'closing', label: 'Closing' },
+  { id: 'requirements', label: 'Requirements', minMinutes: 0 },
+  { id: 'high-level', label: 'High-Level Design', minMinutes: 3 },
+  { id: 'deep-dive', label: 'Deep Dive', minMinutes: 10 },
+  { id: 'scaling', label: 'Scaling', minMinutes: 25 },
+  { id: 'closing', label: 'Closing', minMinutes: 35 },
 ];
+
+/**
+ * Extract all node labels from a Mermaid diagram string.
+ * Handles: node[Label], node(Label), node{Label}, node[(Label)],
+ *          node[[Label]], node{{Label}}, node>Label]
+ */
+function extractNodeLabels(diagram: string): string[] {
+  if (!diagram) return [];
+  const labels: string[] = [];
+  // Match node definitions with various bracket types
+  const patterns = [
+    /\w+\[\[(.+?)\]\]/g,    // subroutine [[text]]
+    /\w+\[\((.+?)\)\]/g,    // cylindrical [(text)]
+    /\w+\{\{(.+?)\}\}/g,    // hexagon {{text}}
+    /\w+\[(.+?)\]/g,        // standard [text]
+    /\w+\((.+?)\)/g,        // round (text)
+    /\w+\{(.+?)\}/g,        // diamond {text}
+    /\w+>\s*(.+?)\]/g,      // asymmetric >text]
+  ];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(diagram)) !== null) {
+      labels.push(match[1].trim());
+    }
+  }
+  return labels;
+}
+
+/**
+ * Normalize a string for fuzzy matching: lowercase, strip non-alphanumeric
+ */
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Check if an expected component name fuzzy-matches any node label.
+ * Returns the matched label or null.
+ * e.g. "loadbalancer" matches "Load Balancer", "cache" matches "Redis Cache"
+ */
+function fuzzyMatchComponent(
+  expectedComponent: string,
+  nodeLabels: string[]
+): string | null {
+  const normExpected = normalize(expectedComponent);
+  for (const label of nodeLabels) {
+    const normLabel = normalize(label);
+    if (normLabel.includes(normExpected) || normExpected.includes(normLabel)) {
+      return label;
+    }
+  }
+  return null;
+}
 
 export function SystemDesignPanel() {
   const selectedTopicId = useSystemDesignStore((s) => s.selectedTopicId);
   const mermaidDiagram = useSystemDesignStore((s) => s.mermaidDiagram);
+  const interviewStartTime = useSystemDesignStore((s) => s.interviewStartTime);
 
   const topic = selectedTopicId ? getSystemDesignTopic(selectedTopicId) : null;
 
@@ -31,17 +86,44 @@ export function SystemDesignPanel() {
   // Count components from Mermaid diagram
   const { nodes: nodeCount } = countMermaidComponents(mermaidDiagram);
 
-  // Determine current phase based on diagram state
-  let currentPhaseIndex = 0;
-  if (nodeCount >= 1) currentPhaseIndex = 1;
-  if (nodeCount >= 3) currentPhaseIndex = 2;
-  if (nodeCount >= 5) currentPhaseIndex = 3;
-  if (nodeCount >= 7) currentPhaseIndex = 4;
+  // Extract node labels for fuzzy matching
+  const nodeLabels = useMemo(() => extractNodeLabels(mermaidDiagram), [mermaidDiagram]);
 
-  // Extract component types from Mermaid (simplified - just count unique node IDs)
-  const nodeMatches = mermaidDiagram.match(/\w+[\[\(\{\>]/g) || [];
-  const uniqueNodes = new Set(nodeMatches.map(m => m.replace(/[\[\(\{\>]/, '')));
-  const componentsPlaced = uniqueNodes.size;
+  // Fuzzy-match each expected component against actual node labels
+  const componentMatches = useMemo(() => {
+    return topic.expectedComponents.map((comp) => ({
+      name: comp,
+      matchedLabel: fuzzyMatchComponent(comp, nodeLabels),
+    }));
+  }, [topic.expectedComponents, nodeLabels]);
+
+  const matchedCount = componentMatches.filter((c) => c.matchedLabel !== null).length;
+
+  // Determine current phase using a blend of time elapsed and node count
+  const elapsedMinutes = interviewStartTime
+    ? (Date.now() - interviewStartTime) / 60000
+    : 0;
+
+  // Node-count-based phase index
+  let nodePhaseIndex = 0;
+  if (nodeCount >= 1) nodePhaseIndex = 1;
+  if (nodeCount >= 3) nodePhaseIndex = 2;
+  if (nodeCount >= 5) nodePhaseIndex = 3;
+  if (nodeCount >= 7) nodePhaseIndex = 4;
+
+  // Time-based phase index
+  let timePhaseIndex = 0;
+  if (elapsedMinutes >= 3) timePhaseIndex = 1;
+  if (elapsedMinutes >= 10) timePhaseIndex = 2;
+  if (elapsedMinutes >= 25) timePhaseIndex = 3;
+  if (elapsedMinutes >= 35) timePhaseIndex = 4;
+
+  // Blend: if node count is running ahead of time, prefer time-based phasing.
+  // Otherwise take the max of both heuristics.
+  const currentPhaseIndex =
+    nodePhaseIndex > timePhaseIndex + 1
+      ? timePhaseIndex  // node count is disproportionately high; trust time
+      : Math.max(nodePhaseIndex, timePhaseIndex);
 
   return (
     <div className="h-full flex flex-col bg-card">
@@ -112,15 +194,14 @@ export function SystemDesignPanel() {
           {/* Expected Components Checklist */}
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Components ({componentsPlaced}/{topic.expectedComponents.length})
+              Components ({matchedCount}/{topic.expectedComponents.length})
             </h4>
             <div className="space-y-1.5">
-              {topic.expectedComponents.map((comp, idx) => {
-                // Simple heuristic: mark as placed if we have enough components
-                const isPlaced = idx < componentsPlaced;
+              {componentMatches.map(({ name, matchedLabel }) => {
+                const isPlaced = matchedLabel !== null;
                 return (
                   <div
-                    key={comp}
+                    key={name}
                     className={`flex items-center gap-2 text-sm ${
                       isPlaced ? 'text-green-400' : 'text-muted-foreground/60'
                     }`}
@@ -130,7 +211,12 @@ export function SystemDesignPanel() {
                     ) : (
                       <Circle className="w-3 h-3 shrink-0" />
                     )}
-                    <span className="capitalize">{comp}</span>
+                    <span className="capitalize">{name}</span>
+                    {isPlaced && matchedLabel && (
+                      <span className="text-[10px] text-muted-foreground ml-auto truncate max-w-[100px]" title={matchedLabel}>
+                        {matchedLabel}
+                      </span>
+                    )}
                   </div>
                 );
               })}

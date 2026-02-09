@@ -9,11 +9,11 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-blue-100 dark:selection:bg-purple-900/50">
-      {/* Background Gradients */}
-      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 md:-top-[20%] left-[20%] w-[500px] h-[500px] bg-purple-100 dark:bg-purple-900 rounded-full blur-[120px] opacity-30 dark:opacity-20" />
-        <div className="absolute bottom-0 md:-bottom-[20%] right-[20%] w-[500px] h-[500px] bg-blue-100 dark:bg-blue-900 rounded-full blur-[120px] opacity-30 dark:opacity-20" />
+    <div className="min-h-screen bg-background text-foreground flex flex-col selection:bg-sky-200 selection:text-foreground dark:selection:bg-purple-900/50">
+      {/* Background Gradients — dark mode only */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none hidden dark:block">
+        <div className="absolute top-0 md:-top-[20%] left-[20%] w-[500px] h-[500px] bg-purple-900 rounded-full blur-[120px] opacity-20" />
+        <div className="absolute bottom-0 md:-bottom-[20%] right-[20%] w-[500px] h-[500px] bg-blue-900 rounded-full blur-[120px] opacity-20" />
       </div>
 
       <header className="border-b bg-white/90 dark:bg-background/80 backdrop-blur-md sticky top-0 z-50">
@@ -42,12 +42,12 @@ export default function Home() {
 
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight flex flex-col items-center gap-2 pb-2">
             <span className="animate-slide-up-fade" style={{ animationDelay: '200ms' }}>Meet <span className="animate-color-wave font-extrabold tracking-tight">BetterThanLeet</span></span>
-            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground dark:text-foreground/70 font-normal" style={{ animationDelay: '400ms' }}>
+            <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-foreground dark:text-foreground/70 font-normal" style={{ animationDelay: '400ms' }}>
               Your AI Technical Interviewer, Alexis
             </span>
           </h1>
 
-          <p className="text-xl text-muted-foreground dark:text-foreground/60 max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
+          <p className="text-xl text-foreground/80 dark:text-foreground/60 max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
             LeetCode can't ask follow-up questions. Alexis can. Experience voice-first technical interviews
             powered by Gemini 3 Pro with real-time coding and instant feedback.
           </p>

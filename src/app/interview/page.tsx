@@ -32,8 +32,10 @@ import Link from "next/link";
 import { SystemDesignAgent } from "@/components/agent/SystemDesignAgent";
 import MermaidDiagramCanvas from "@/components/diagram/MermaidDiagramCanvas";
 import { SystemDesignPanel } from "@/components/diagram/SystemDesignPanel";
+import { SystemDesignReportDialog } from "@/components/diagram/SystemDesignReportDialog";
 import { useSystemDesignStore } from "@/lib/system-design-store";
 import { Layers } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function InterviewPage() {
   const {
@@ -533,10 +535,11 @@ export default function InterviewPage() {
 function SystemDesignInterviewLayout() {
   const selectedTopicId = useSystemDesignStore((s) => s.selectedTopicId);
   const setOnEndInterview = useSystemDesignStore((s) => s.setOnEndInterview);
-  const agentDisconnect = useSystemDesignStore((s) => s.agentDisconnect);
-  
+  const router = useRouter();
+
   const [mounted, setMounted] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   const toggleMute = () => {
     const next = !soundMuted;
@@ -552,9 +555,9 @@ function SystemDesignInterviewLayout() {
   // Check if topic is selected
   useEffect(() => {
     if (!selectedTopicId) {
-      window.location.href = '/system-design';
+      router.push('/system-design');
     }
-  }, [selectedTopicId]);
+  }, [selectedTopicId, router]);
 
   // Initialize session
   useEffect(() => {
@@ -572,8 +575,8 @@ function SystemDesignInterviewLayout() {
 
     playSound('complete');
 
-    // Navigate back to topic selection
-    window.location.href = '/system-design';
+    // Show report dialog instead of navigating away
+    setShowReport(true);
   };
 
   // Register end-interview callback
@@ -592,7 +595,7 @@ function SystemDesignInterviewLayout() {
           Alexis
         </Link>
         <div className="text-xs text-muted-foreground flex items-center gap-4">
-          <Timer />
+          <Timer mode="system-design" />
           <button
             onClick={toggleMute}
             className="p-1 rounded hover:bg-accent transition-colors"
@@ -632,20 +635,21 @@ function SystemDesignInterviewLayout() {
               </div>
 
               <div className="flex-1 min-h-0 overflow-hidden border-b">
-                <TranscriptPanel />
+                <TranscriptPanel mode="system-design" />
               </div>
 
               <Controls
                 onRun={() => {}}
                 onEndInterview={handleEndInterview}
                 isRunning={false}
-                isFixing={false}
-                hasError={false}
+                mode="system-design"
               />
             </div>
           </ResizablePanel>
         </ResizablePanelGroup>
       </div>
+
+      <SystemDesignReportDialog open={showReport} onOpenChange={setShowReport} />
     </div>
   );
 }

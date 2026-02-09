@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useInterviewStore } from '@/lib/store';
+import { useSystemDesignStore } from '@/lib/system-design-store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquare, Mic, Type } from 'lucide-react';
 
@@ -38,8 +39,14 @@ function groupTranscript(transcript: { speaker: 'agent' | 'user'; message: strin
   return groups;
 }
 
-export function TranscriptPanel() {
-  const transcript = useInterviewStore((s) => s.transcript);
+interface TranscriptPanelProps {
+  mode?: 'coding' | 'system-design';
+}
+
+export function TranscriptPanel({ mode = 'coding' }: TranscriptPanelProps) {
+  const codingTranscript = useInterviewStore((s) => s.transcript);
+  const sdTranscript = useSystemDesignStore((s) => s.transcript);
+  const transcript = mode === 'system-design' ? sdTranscript : codingTranscript;
   const endRef = useRef<HTMLDivElement>(null);
   const [, setTick] = useState(0);
 

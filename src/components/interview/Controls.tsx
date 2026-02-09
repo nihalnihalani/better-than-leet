@@ -22,6 +22,7 @@ interface ControlsProps {
   isRunning: boolean;
   isFixing?: boolean;
   hasError?: boolean;
+  mode?: 'coding' | 'system-design';
 }
 
 export function Controls({
@@ -30,22 +31,27 @@ export function Controls({
     onEndInterview,
     isRunning,
     isFixing,
-    hasError
+    hasError,
+    mode = 'coding',
 }: ControlsProps) {
+  const isSystemDesign = mode === 'system-design';
+
   return (
     <div className="flex flex-col gap-2 p-4">
-      <Button
-        onClick={onRun}
-        disabled={isRunning}
-        aria-busy={isRunning}
-        aria-label={isRunning ? "Running code" : "Run code"}
-        className="w-full bg-green-600 hover:bg-green-700 text-white"
-      >
-        <Play className="w-4 h-4 mr-2" fill="currentColor" aria-hidden="true" />
-        {isRunning ? "Running..." : "Run Code"}
-      </Button>
+      {!isSystemDesign && (
+        <Button
+          onClick={onRun}
+          disabled={isRunning}
+          aria-busy={isRunning}
+          aria-label={isRunning ? "Running code" : "Run code"}
+          className="w-full bg-green-600 hover:bg-green-700 text-white"
+        >
+          <Play className="w-4 h-4 mr-2" fill="currentColor" aria-hidden="true" />
+          {isRunning ? "Running..." : "Run Code"}
+        </Button>
+      )}
 
-      {hasError && onAutoFix && (
+      {!isSystemDesign && hasError && onAutoFix && (
         <Button
             onClick={onAutoFix}
             disabled={isFixing}
@@ -62,7 +68,7 @@ export function Controls({
         <AlertDialogTrigger asChild>
           <Button
             variant="destructive"
-            className="w-full mt-4"
+            className={`w-full ${!isSystemDesign ? 'mt-4' : ''}`}
             aria-label="End interview and download report"
           >
             <FileDown className="w-4 h-4 mr-2" aria-hidden="true" />
@@ -73,7 +79,9 @@ export function Controls({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to end the interview?</AlertDialogTitle>
             <AlertDialogDescription>
-              Your interview will be evaluated and a report will be generated. This action cannot be undone.
+              {isSystemDesign
+                ? 'Your system design interview will be evaluated and a report will be generated. This action cannot be undone.'
+                : 'Your interview will be evaluated and a report will be generated. This action cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

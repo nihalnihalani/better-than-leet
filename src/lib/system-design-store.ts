@@ -18,6 +18,9 @@ interface SystemDesignState {
   mermaidDiagram: string;
   setMermaidDiagram: (diagram: string) => void;
   diagramHistory: string[];
+  diagramHistoryIndex: number;
+  undoDiagram: () => void;
+  redoDiagram: () => void;
   clearDiagram: () => void;
 
   // Conversation Transcript
@@ -39,19 +42,46 @@ interface SystemDesignState {
 
 export const useSystemDesignStore = create<SystemDesignState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Topic Selection
       selectedTopicId: null,
       setSelectedTopicId: (selectedTopicId) => set({ selectedTopicId }),
 
       // Diagram State (Mermaid-based)
       mermaidDiagram: '',
-      setMermaidDiagram: (diagram) => set((state) => ({
-        mermaidDiagram: diagram,
-        diagramHistory: [...state.diagramHistory, diagram]
-      })),
+      setMermaidDiagram: (diagram) => {
+        const state = get();
+        // Truncate any forward history on new edit, cap at 50
+        const newHistory = [...state.diagramHistory.slice(0, state.diagramHistoryIndex + 1), diagram].slice(-50);
+        set({
+          mermaidDiagram: diagram,
+          diagramHistory: newHistory,
+          diagramHistoryIndex: newHistory.length - 1,
+        });
+      },
       diagramHistory: [],
-      clearDiagram: () => set({ mermaidDiagram: '', diagramHistory: [] }),
+      diagramHistoryIndex: -1,
+      undoDiagram: () => {
+        const state = get();
+        if (state.diagramHistoryIndex > 0) {
+          const newIndex = state.diagramHistoryIndex - 1;
+          set({
+            mermaidDiagram: state.diagramHistory[newIndex],
+            diagramHistoryIndex: newIndex,
+          });
+        }
+      },
+      redoDiagram: () => {
+        const state = get();
+        if (state.diagramHistoryIndex < state.diagramHistory.length - 1) {
+          const newIndex = state.diagramHistoryIndex + 1;
+          set({
+            mermaidDiagram: state.diagramHistory[newIndex],
+            diagramHistoryIndex: newIndex,
+          });
+        }
+      },
+      clearDiagram: () => set({ mermaidDiagram: '', diagramHistory: [], diagramHistoryIndex: -1 }),
 
       // Conversation Transcript
       transcript: [],
@@ -78,24 +108,31 @@ export const useSystemDesignStore = create<SystemDesignState>()(
     }),
     {
       name: 'system-design-storage',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         selectedTopicId: state.selectedTopicId,
         mermaidDiagram: state.mermaidDiagram,
         diagramHistory: state.diagramHistory,
+        diagramHistoryIndex: state.diagramHistoryIndex,
         transcript: state.transcript,
+        interviewStartTime: state.interviewStartTime,
       }),
       migrate: (persistedState: any, version: number) => {
-        // Migration from v1 (nodes/edges) to v2 (mermaid)
         if (version < 2) {
           return {
             ...persistedState,
             mermaidDiagram: '',
             diagramHistory: [],
-            // Remove old fields
+            diagramHistoryIndex: -1,
             diagramNodes: undefined,
             diagramEdges: undefined,
+          };
+        }
+        if (version < 3) {
+          return {
+            ...persistedState,
+            diagramHistoryIndex: (persistedState.diagramHistory?.length ?? 0) - 1,
           };
         }
         return persistedState;

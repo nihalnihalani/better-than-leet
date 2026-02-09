@@ -10,11 +10,24 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useInterviewStore } from '@/lib/store';
 import { useSystemDesignStore } from '@/lib/system-design-store';
 import { SYSTEM_DESIGN_TOPICS } from '@/data/system-design-topics';
-import { ArrowLeft, Layers, ArrowRight } from 'lucide-react';
+import { ArrowLeft, Layers, ArrowRight, Search } from 'lucide-react';
+
+type DifficultyFilter = 'All' | 'Medium' | 'Hard';
 
 export default function SystemDesignPage() {
   const router = useRouter();
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('All');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredTopics = SYSTEM_DESIGN_TOPICS.filter((topic) => {
+    const matchesDifficulty =
+      difficultyFilter === 'All' || topic.difficulty === difficultyFilter;
+    const matchesSearch =
+      searchQuery.trim() === '' ||
+      topic.title.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesDifficulty && matchesSearch;
+  });
 
   const { setInterviewMode, setSelectedTopicId: setMainStoreTopicId } = useInterviewStore();
   const { setSelectedTopicId: setSDStoreTopicId, clearDiagram } = useSystemDesignStore();
@@ -67,8 +80,37 @@ export default function SystemDesignPage() {
             </p>
           </div>
 
+          {/* Filter Bar */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 mb-6">
+            <div className="flex items-center gap-1 bg-secondary/50 rounded-lg p-1">
+              {(['All', 'Medium', 'Hard'] as DifficultyFilter[]).map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setDifficultyFilter(level)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    difficultyFilter === level
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search topics..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-1.5 text-sm rounded-lg border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {SYSTEM_DESIGN_TOPICS.map((topic) => {
+            {filteredTopics.map((topic) => {
               const isSelected = selectedTopicId === topic.id;
               return (
                 <Card
