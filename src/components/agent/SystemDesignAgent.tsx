@@ -69,7 +69,7 @@ export function SystemDesignAgent() {
         return responses;
     }, []);
 
-    // Initialize Client — creates GeminiLiveClient with API key
+    // Initialize Client - creates GeminiLiveClient with API key
     const initClient = useCallback(async (): Promise<boolean> => {
         setInitError(null);
 
@@ -168,11 +168,11 @@ export function SystemDesignAgent() {
             setTimeout(() => {
                 if (client.isConnected()) {
                     if (hasConnectedOnceRef.current) {
-                        // Reconnection — recover context without re-introducing
+                        // Reconnection - recover context without re-introducing
                         client.sendText(`[CONTEXT RECOVERY] The connection was briefly interrupted. Resume the interview from where we left off. Do NOT re-introduce the topic or re-greet the candidate.`);
                     } else {
-                        // First connection — tell Gemini to follow its system instruction
-                        client.sendText(`[SYSTEM] The interview has started. Greet the candidate, present the system design problem as described in your instructions, and ask them to begin by defining requirements or proposing their approach. Do NOT output a Mermaid diagram yet — wait for the candidate to describe components first.`);
+                        // First connection - tell Gemini to follow its system instruction
+                        client.sendText(`[SYSTEM] The interview has started. Greet the candidate, present the system design problem as described in your instructions, and ask them to begin by defining requirements or proposing their approach. Do NOT output a Mermaid diagram yet - wait for the candidate to describe components first.`);
                         hasConnectedOnceRef.current = true;
                     }
                 }
@@ -180,7 +180,7 @@ export function SystemDesignAgent() {
         };
 
         client.onDisconnect = () => {
-            // Involuntary disconnect — allow auto-reconnect
+            // Involuntary disconnect - allow auto-reconnect
             shouldAutoReconnectRef.current = true;
         };
 

@@ -10,7 +10,7 @@ export interface SystemDesignTopic {
 export const SYSTEM_DESIGN_TOPICS: SystemDesignTopic[] = [
   {
     id: 'demo-simple-api',
-    title: '🎯 Demo: Simple REST API',
+    title: 'Demo: Simple REST API',
     description: 'A quick 2-minute demo showing how Alexis builds architecture diagrams in real-time as you discuss the design. Perfect for first-time users!',
     difficulty: 'Medium',
     expectedComponents: ['client', 'loadbalancer', 'service', 'cache', 'database'],
