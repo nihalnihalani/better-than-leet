@@ -254,11 +254,15 @@ Example practice dialogue:
 `;
 
 /**
- * Get the full system instruction based on interview mode
+ * Get the full system instruction based on interview mode and optional persona
  */
-export function getSystemInstruction(mode: 'real' | 'practice' = 'real'): string {
+export function getSystemInstruction(mode: 'real' | 'practice' = 'real', personaPrompt?: string): string {
+  let instruction = INTERVIEWER_SYSTEM_INSTRUCTION;
   if (mode === 'practice') {
-    return INTERVIEWER_SYSTEM_INSTRUCTION + PRACTICE_MODE_ADDITION;
+    instruction += PRACTICE_MODE_ADDITION;
   }
-  return INTERVIEWER_SYSTEM_INSTRUCTION;
+  if (personaPrompt) {
+    instruction += personaPrompt;
+  }
+  return instruction;
 }

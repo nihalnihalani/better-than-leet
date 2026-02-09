@@ -8,7 +8,7 @@
  * @returns Array of Mermaid diagram strings
  */
 export function extractMermaidBlocks(text: string): string[] {
-  const mermaidRegex = /```mermaid\n([\s\S]*?)\n```/g;
+  const mermaidRegex = /```mermaid\s*\n([\s\S]*?)```/g;
   const blocks: string[] = [];
   let match;
 
@@ -54,15 +54,23 @@ export function validateMermaidSyntax(diagram: string): {
   }
 
   // Check for valid diagram type
-  const validTypes = ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'erDiagram'];
-  const hasValidType = validTypes.some(type => diagram.trim().startsWith(type));
+  const validTypes = [
+    'graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram',
+    'erDiagram', 'gantt', 'pie', 'gitGraph', 'journey', 'mindmap', 'timeline',
+    'C4Context', 'C4Container', 'C4Component', 'C4Deployment',
+    'quadrantChart', 'sankey', 'xychart', 'block',
+  ];
+  const trimmed = diagram.trim();
+  const hasValidType = validTypes.some(type => trimmed.startsWith(type));
 
   if (!hasValidType) {
-    return { valid: false, error: 'Invalid diagram type. Expected: graph, flowchart, etc.' };
+    return { valid: false, error: 'Invalid diagram type. Expected: graph, flowchart, sequenceDiagram, etc.' };
   }
 
-  // Check for basic structure (at least one node or connection)
-  const hasContent = diagram.includes('[') || diagram.includes('-->') || diagram.includes('---');
+  // Check for basic structure (nodes, connections, or diagram-specific syntax)
+  const hasContent = diagram.includes('[') || diagram.includes('-->') || diagram.includes('---')
+    || diagram.includes('->>') || diagram.includes('--)') || diagram.includes('||--')
+    || diagram.includes(':') || diagram.length > 30;
   if (!hasContent) {
     return { valid: false, error: 'Diagram has no nodes or connections' };
   }

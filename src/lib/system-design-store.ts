@@ -10,6 +10,9 @@ interface TranscriptMessage {
 }
 
 interface SystemDesignState {
+  // Hydration flag (not persisted — set by onRehydrateStorage)
+  _hasHydrated: boolean;
+
   // Topic Selection
   selectedTopicId: string | null;
   setSelectedTopicId: (id: string | null) => void;
@@ -43,6 +46,9 @@ interface SystemDesignState {
 export const useSystemDesignStore = create<SystemDesignState>()(
   persist(
     (set, get) => ({
+      // Hydration flag
+      _hasHydrated: false,
+
       // Topic Selection
       selectedTopicId: null,
       setSelectedTopicId: (selectedTopicId) => set({ selectedTopicId }),
@@ -83,16 +89,17 @@ export const useSystemDesignStore = create<SystemDesignState>()(
       },
       clearDiagram: () => set({ mermaidDiagram: '', diagramHistory: [], diagramHistoryIndex: -1 }),
 
-      // Conversation Transcript
+      // Conversation Transcript (capped at 500 messages to prevent memory leaks)
       transcript: [],
-      addTranscriptMessage: (speaker, message, type = 'audio') => set((state) => ({
-        transcript: [...state.transcript, {
+      addTranscriptMessage: (speaker, message, type = 'audio') => set((state) => {
+        const updated = [...state.transcript, {
           timestamp: Date.now(),
           speaker,
           message,
           type
-        }]
-      })),
+        }];
+        return { transcript: updated.length > 500 ? updated.slice(-500) : updated };
+      }),
       clearTranscript: () => set({ transcript: [] }),
 
       // Agent callbacks
@@ -118,6 +125,10 @@ export const useSystemDesignStore = create<SystemDesignState>()(
         transcript: state.transcript,
         interviewStartTime: state.interviewStartTime,
       }),
+      onRehydrateStorage: () => () => {
+        useSystemDesignStore.setState({ _hasHydrated: true });
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       migrate: (persistedState: any, version: number) => {
         if (version < 2) {
           return {

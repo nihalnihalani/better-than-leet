@@ -27,7 +27,9 @@ export function InterviewAgent() {
     const clientRef = useRef<InterviewLiveClient | null>(null);
 
     // Tool handler - always gets fresh state to avoid closure issues
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         console.log("🛠️ Handling Tool Calls:", functionCalls.map((c: any) => c.name));
 
         // Get fresh tools - they read workspaceId from the store internally
@@ -39,6 +41,7 @@ export function InterviewAgent() {
             const name = call.name;
             const args = call.args || {};
             const id = call.id; // Gemini function call ID
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const fn = (toolFunctions as any)[name];
 
             console.log(`🔧 Executing tool: ${name}`, { id, args });
@@ -109,6 +112,16 @@ export function InterviewAgent() {
             const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
             console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
             const client = new InterviewLiveClient(apiKey.trim(), mode);
+
+        // Set persona if selected
+        const personaId = useInterviewStore.getState().selectedPersonaId;
+        if (personaId) {
+            const { getPersona } = await import('@/data/interviewer-personas');
+            const persona = getPersona(personaId);
+            if (persona) {
+                client.setPersona(persona.promptAddition);
+            }
+        }
 
         client.onStatusChange = (s) => setStatus(s);
         client.onToolsCall = handleToolsCall;
@@ -191,6 +204,7 @@ export function InterviewAgent() {
             }
             setAgentDisconnect(null);
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [workspaceId, interviewMode, setAgentDisconnect]); // Re-init if workspace or interview mode changes
 
     // Track previous code to detect meaningful changes

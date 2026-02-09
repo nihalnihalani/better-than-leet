@@ -1,4 +1,3 @@
-import { Problem } from './problems';
 import { CompanyProblem, Company } from './company-problems';
 
 export interface NeetCodeCategory {
@@ -45,6 +44,16 @@ const arraysHashingProblems: CompanyProblem[] = [
       'If you see a number that is already in the set, return true.',
       'Time complexity can be O(n) with O(n) space using a set.',
     ],
+    solution: 'Insert each number into a hash set. If the number is already present, return true. After processing all numbers, return false.',
+    solutionCode: `def containsDuplicate(nums):
+    seen = set()
+    for num in nums:
+        if num in seen:
+            return True
+        seen.add(num)
+    return False`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-valid-anagram',
@@ -79,6 +88,20 @@ An **Anagram** is a word or phrase formed by rearranging the letters of a differ
       'If the frequency maps are equal, they are anagrams.',
       'Alternatively, sort both strings and compare.',
     ],
+    solution: 'Count character frequencies in both strings using a hash map or array. If the counts match, the strings are anagrams.',
+    solutionCode: `def isAnagram(s, t):
+    if len(s) != len(t):
+        return False
+    count = {}
+    for c in s:
+        count[c] = count.get(c, 0) + 1
+    for c in t:
+        count[c] = count.get(c, 0) - 1
+        if count[c] < 0:
+            return False
+    return True`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-two-sum',
@@ -117,6 +140,17 @@ You can return the answer in any order.`,
       'For each number, check if (target - num) exists in the map.',
       'One pass through the array is sufficient.',
     ],
+    solution: 'Use a hash map to store each number and its index. For each number, check if (target - num) exists in the map. This gives O(n) time.',
+    solutionCode: `def twoSum(nums, target):
+    seen = {}
+    for i, num in enumerate(nums):
+        complement = target - num
+        if complement in seen:
+            return [seen[complement], i]
+        seen[num] = i
+    return []`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-group-anagrams',
@@ -150,6 +184,15 @@ An Anagram is a word or phrase formed by rearranging the letters of a different 
       'Alternatively, use character count tuple as key.',
       'Hash map with key -> list of anagrams.',
     ],
+    solution: 'Use a hash map where the key is the sorted version of each string. All anagrams will map to the same key.',
+    solutionCode: `def groupAnagrams(strs):
+    groups = {}
+    for s in strs:
+        key = ''.join(sorted(s))
+        groups.setdefault(key, []).append(s)
+    return list(groups.values())`,
+    timeComplexity: 'O(n * k log k)',
+    spaceComplexity: 'O(n * k)',
   },
   {
     id: 'nc-top-k-frequent',
@@ -182,6 +225,23 @@ An Anagram is a word or phrase formed by rearranging the letters of a different 
       'Use a min-heap of size k, or bucket sort by frequency.',
       'Bucket sort gives O(n) time complexity.',
     ],
+    solution: 'Count frequencies with a hash map, then use bucket sort where index = frequency. Collect elements from highest bucket down until you have k elements.',
+    solutionCode: `def topKFrequent(nums, k):
+    count = {}
+    for num in nums:
+        count[num] = count.get(num, 0) + 1
+    buckets = [[] for _ in range(len(nums) + 1)]
+    for num, freq in count.items():
+        buckets[freq].append(num)
+    result = []
+    for i in range(len(buckets) - 1, 0, -1):
+        for num in buckets[i]:
+            result.append(num)
+            if len(result) == k:
+                return result
+    return result`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-encode-decode-strings',
@@ -223,6 +283,21 @@ Implement \`encode\` and \`decode\` methods.`,
       'Store length of each string followed by a delimiter.',
       'When decoding, read length first, then extract that many characters.',
     ],
+    solution: 'Encode each string as its length followed by a delimiter (#) then the string itself. To decode, read the length, skip the delimiter, and extract that many characters.',
+    solutionCode: `class Codec:
+    def encode(self, strs):
+        return ''.join(str(len(s)) + '#' + s for s in strs)
+
+    def decode(self, s):
+        result, i = [], 0
+        while i < len(s):
+            j = s.index('#', i)
+            length = int(s[i:j])
+            result.append(s[j + 1:j + 1 + length])
+            i = j + 1 + length
+        return result`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-product-except-self',
@@ -258,6 +333,21 @@ You must write an algorithm that runs in O(n) time and without using the divisio
       'answer[i] = (product of all elements before i) * (product of all elements after i).',
       'Can be done in O(1) extra space using the output array.',
     ],
+    solution: 'Build the result using two passes: first pass stores prefix products (left to right), second pass multiplies by suffix products (right to left).',
+    solutionCode: `def productExceptSelf(nums):
+    n = len(nums)
+    answer = [1] * n
+    prefix = 1
+    for i in range(n):
+        answer[i] = prefix
+        prefix *= nums[i]
+    suffix = 1
+    for i in range(n - 1, -1, -1):
+        answer[i] *= suffix
+        suffix *= nums[i]
+    return answer`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-valid-sudoku',
@@ -293,6 +383,25 @@ Note: A Sudoku board (partially filled) could be valid but is not necessarily so
       'Box index can be calculated as (row // 3, col // 3).',
       'One pass through the board is sufficient.',
     ],
+    solution: 'Use three sets (rows, columns, boxes) to track digits seen. For each filled cell, check if the digit already exists in its row, column, or 3x3 box.',
+    solutionCode: `def isValidSudoku(board):
+    rows = [set() for _ in range(9)]
+    cols = [set() for _ in range(9)]
+    boxes = [set() for _ in range(9)]
+    for r in range(9):
+        for c in range(9):
+            val = board[r][c]
+            if val == '.':
+                continue
+            box_idx = (r // 3) * 3 + c // 3
+            if val in rows[r] or val in cols[c] or val in boxes[box_idx]:
+                return False
+            rows[r].add(val)
+            cols[c].add(val)
+            boxes[box_idx].add(val)
+    return True`,
+    timeComplexity: 'O(81) = O(1)',
+    spaceComplexity: 'O(81) = O(1)',
   },
   {
     id: 'nc-longest-consecutive',
@@ -326,6 +435,19 @@ You must write an algorithm that runs in O(n) time.`,
       'Only start counting from the beginning of a sequence (when num-1 is not in set).',
       'This ensures each number is visited at most twice.',
     ],
+    solution: 'Put all numbers in a set. For each number, only start counting if (num-1) is NOT in the set (start of a sequence). Then count consecutive numbers from that start.',
+    solutionCode: `def longestConsecutive(nums):
+    num_set = set(nums)
+    longest = 0
+    for num in num_set:
+        if num - 1 not in num_set:
+            length = 1
+            while num + length in num_set:
+                length += 1
+            longest = max(longest, length)
+    return longest`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
 ];
 
@@ -367,6 +489,21 @@ Given a string \`s\`, return \`true\` if it is a palindrome, or \`false\` otherw
       'Skip non-alphanumeric characters.',
       'Compare characters case-insensitively.',
     ],
+    solution: 'Use two pointers from both ends. Skip non-alphanumeric characters and compare lowercase versions of the remaining characters.',
+    solutionCode: `def isPalindrome(s):
+    l, r = 0, len(s) - 1
+    while l < r:
+        while l < r and not s[l].isalnum():
+            l += 1
+        while l < r and not s[r].isalnum():
+            r -= 1
+        if s[l].lower() != s[r].lower():
+            return False
+        l += 1
+        r -= 1
+    return True`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-two-sum-ii',
@@ -404,6 +541,20 @@ You may not use the same element twice. Your solution must use only constant ext
       'If sum > target, move right pointer left.',
       'If sum < target, move left pointer right.',
     ],
+    solution: 'Since the array is sorted, use two pointers from both ends. If the sum is too large, move the right pointer left; if too small, move the left pointer right.',
+    solutionCode: `def twoSum(numbers, target):
+    l, r = 0, len(numbers) - 1
+    while l < r:
+        s = numbers[l] + numbers[r]
+        if s == target:
+            return [l + 1, r + 1]
+        elif s < target:
+            l += 1
+        else:
+            r -= 1
+    return []`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-three-sum',
@@ -438,6 +589,31 @@ Notice that the solution set must not contain duplicate triplets.`,
       'Fix one element, then use two pointers for the remaining two.',
       'Skip duplicates to avoid duplicate triplets.',
     ],
+    solution: 'Sort the array. For each element, use two pointers on the remaining subarray to find pairs that sum to the negative of that element. Skip duplicates.',
+    solutionCode: `def threeSum(nums):
+    nums.sort()
+    result = []
+    for i in range(len(nums) - 2):
+        if i > 0 and nums[i] == nums[i - 1]:
+            continue
+        l, r = i + 1, len(nums) - 1
+        while l < r:
+            s = nums[i] + nums[l] + nums[r]
+            if s == 0:
+                result.append([nums[i], nums[l], nums[r]])
+                while l < r and nums[l] == nums[l + 1]:
+                    l += 1
+                while l < r and nums[r] == nums[r - 1]:
+                    r -= 1
+                l += 1
+                r -= 1
+            elif s < 0:
+                l += 1
+            else:
+                r -= 1
+    return result`,
+    timeComplexity: 'O(n^2)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-container-with-most-water',
@@ -473,6 +649,20 @@ Return the maximum amount of water a container can store.`,
       'Area = min(height[l], height[r]) * (r - l).',
       'Move the pointer with smaller height inward.',
     ],
+    solution: 'Use two pointers at both ends. Calculate area as min(height[l], height[r]) * width. Always move the shorter side inward to potentially find a taller line.',
+    solutionCode: `def maxArea(height):
+    l, r = 0, len(height) - 1
+    max_area = 0
+    while l < r:
+        area = min(height[l], height[r]) * (r - l)
+        max_area = max(max_area, area)
+        if height[l] < height[r]:
+            l += 1
+        else:
+            r -= 1
+    return max_area`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-trapping-rain-water',
@@ -504,6 +694,25 @@ Return the maximum amount of water a container can store.`,
       'Two pointer approach: track maxLeft and maxRight as you go.',
       'Move the pointer with smaller max inward.',
     ],
+    solution: 'Use two pointers with maxLeft and maxRight. Water at each position depends on the minimum of the max heights on both sides. Move the pointer with the smaller max inward.',
+    solutionCode: `def trap(height):
+    if not height:
+        return 0
+    l, r = 0, len(height) - 1
+    left_max, right_max = height[l], height[r]
+    water = 0
+    while l < r:
+        if left_max < right_max:
+            l += 1
+            left_max = max(left_max, height[l])
+            water += left_max - height[l]
+        else:
+            r -= 1
+            right_max = max(right_max, height[r])
+            water += right_max - height[r]
+    return water`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
 ];
 
@@ -545,6 +754,16 @@ Return the maximum profit you can achieve from this transaction. If you cannot a
       'At each position, calculate profit if selling today.',
       'Keep track of the maximum profit.',
     ],
+    solution: 'Track the minimum price seen so far. At each day, compute the profit of selling today and update the maximum profit.',
+    solutionCode: `def maxProfit(prices):
+    min_price = float('inf')
+    max_profit = 0
+    for price in prices:
+        min_price = min(min_price, price)
+        max_profit = max(max_profit, price - min_price)
+    return max_profit`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-longest-substring-without-repeat',
@@ -578,6 +797,20 @@ Return the maximum profit you can achieve from this transaction. If you cannot a
       'Expand the window by adding characters to the right.',
       'Shrink from the left when you encounter a duplicate.',
     ],
+    solution: 'Use a sliding window with a set. Expand right, and when a duplicate is found, shrink from the left until the duplicate is removed.',
+    solutionCode: `def lengthOfLongestSubstring(s):
+    char_set = set()
+    l = 0
+    result = 0
+    for r in range(len(s)):
+        while s[r] in char_set:
+            char_set.remove(s[l])
+            l += 1
+        char_set.add(s[r])
+        result = max(result, r - l + 1)
+    return result`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(min(n, m))',
   },
   {
     id: 'nc-longest-repeating-char-replacement',
@@ -612,6 +845,22 @@ Return the length of the longest substring containing the same letter you can ge
       'Window is valid if (window_length - max_freq) <= k.',
       'Track the maximum frequency character in current window.',
     ],
+    solution: 'Use a sliding window tracking character counts. The window is valid when (window_length - max_frequency) <= k. Expand right, shrink left when invalid.',
+    solutionCode: `def characterReplacement(s, k):
+    count = {}
+    l = 0
+    max_freq = 0
+    result = 0
+    for r in range(len(s)):
+        count[s[r]] = count.get(s[r], 0) + 1
+        max_freq = max(max_freq, count[s[r]])
+        while (r - l + 1) - max_freq > k:
+            count[s[l]] -= 1
+            l += 1
+        result = max(result, r - l + 1)
+    return result`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-permutation-in-string',
@@ -646,6 +895,34 @@ In other words, return \`true\` if one of \`s1\`'s permutations is the substring
       'Compare character frequencies of s1 with current window.',
       'Use two arrays of size 26 for frequency comparison.',
     ],
+    solution: 'Slide a window of size len(s1) over s2. Track how many of the 26 character frequencies match between s1 and the window. If all 26 match, return true.',
+    solutionCode: `def checkInclusion(s1, s2):
+    if len(s1) > len(s2):
+        return False
+    s1_count = [0] * 26
+    s2_count = [0] * 26
+    for i in range(len(s1)):
+        s1_count[ord(s1[i]) - ord('a')] += 1
+        s2_count[ord(s2[i]) - ord('a')] += 1
+    matches = sum(1 for i in range(26) if s1_count[i] == s2_count[i])
+    for i in range(len(s1), len(s2)):
+        if matches == 26:
+            return True
+        idx = ord(s2[i]) - ord('a')
+        s2_count[idx] += 1
+        if s2_count[idx] == s1_count[idx]:
+            matches += 1
+        elif s2_count[idx] == s1_count[idx] + 1:
+            matches -= 1
+        idx = ord(s2[i - len(s1)]) - ord('a')
+        s2_count[idx] -= 1
+        if s2_count[idx] == s1_count[idx]:
+            matches += 1
+        elif s2_count[idx] == s1_count[idx] - 1:
+            matches -= 1
+    return matches == 26`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'nc-minimum-window-substring',
@@ -680,6 +957,30 @@ In other words, return \`true\` if one of \`s1\`'s permutations is the substring
       'Expand right to include required characters.',
       'Contract left to minimize window while maintaining validity.',
     ],
+    solution: 'Use a sliding window with two hash maps. Expand right until all characters of t are covered. Then shrink left to find the minimum valid window.',
+    solutionCode: `def minWindow(s, t):
+    from collections import Counter
+    need = Counter(t)
+    have, required = 0, len(need)
+    window = {}
+    res, res_len = [-1, -1], float('inf')
+    l = 0
+    for r in range(len(s)):
+        c = s[r]
+        window[c] = window.get(c, 0) + 1
+        if c in need and window[c] == need[c]:
+            have += 1
+        while have == required:
+            if (r - l + 1) < res_len:
+                res, res_len = [l, r], r - l + 1
+            window[s[l]] -= 1
+            if s[l] in need and window[s[l]] < need[s[l]]:
+                have -= 1
+            l += 1
+    l, r = res
+    return s[l:r + 1] if res_len != float('inf') else ''`,
+    timeComplexity: 'O(m + n)',
+    spaceComplexity: 'O(m + n)',
   },
   {
     id: 'nc-sliding-window-maximum',
@@ -714,6 +1015,22 @@ Return the max sliding window.`,
       'Store indices in the deque, not values.',
       'Remove indices outside the window and smaller elements.',
     ],
+    solution: 'Use a monotonic decreasing deque storing indices. For each element, remove smaller elements from the back and expired indices from the front. The front of the deque is always the max.',
+    solutionCode: `def maxSlidingWindow(nums, k):
+    from collections import deque
+    dq = deque()
+    result = []
+    for i in range(len(nums)):
+        while dq and nums[dq[-1]] <= nums[i]:
+            dq.pop()
+        dq.append(i)
+        if dq[0] <= i - k:
+            dq.popleft()
+        if i >= k - 1:
+            result.append(nums[dq[0]])
+    return result`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(k)',
   },
 ];
 
@@ -758,6 +1075,20 @@ An input string is valid if:
       'When you see a closing bracket, check if it matches the top of the stack.',
       'At the end, the stack should be empty.',
     ],
+    solution: 'Use a stack. Push opening brackets. For closing brackets, check if the stack top is the matching opener. At the end, the stack must be empty.',
+    solutionCode: `def isValid(s):
+    stack = []
+    pairs = {')': '(', ']': '[', '}': '{'}
+    for c in s:
+        if c in pairs:
+            if not stack or stack[-1] != pairs[c]:
+                return False
+            stack.pop()
+        else:
+            stack.append(c)
+    return len(stack) == 0`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-min-stack',
@@ -803,6 +1134,28 @@ Implement the MinStack class:
       'Or store tuples (value, current_min) in a single stack.',
       'Each push updates the minimum.',
     ],
+    solution: 'Use two stacks: one for values and one for tracking minimums. On each push, also push the current minimum to the min stack.',
+    solutionCode: `class MinStack:
+    def __init__(self):
+        self.stack = []
+        self.min_stack = []
+
+    def push(self, val):
+        self.stack.append(val)
+        val = min(val, self.min_stack[-1] if self.min_stack else val)
+        self.min_stack.append(val)
+
+    def pop(self):
+        self.stack.pop()
+        self.min_stack.pop()
+
+    def top(self):
+        return self.stack[-1]
+
+    def getMin(self):
+        return self.min_stack[-1]`,
+    timeComplexity: 'O(1) per operation',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-evaluate-rpn',
@@ -836,6 +1189,25 @@ Evaluate the expression. Return an integer that represents the value of the expr
       'When you see an operator, pop two operands and apply the operation.',
       'Push the result back onto the stack.',
     ],
+    solution: 'Use a stack. Push numbers. When encountering an operator, pop two operands, apply the operation, and push the result back.',
+    solutionCode: `def evalRPN(tokens):
+    stack = []
+    for token in tokens:
+        if token in '+-*/':
+            b, a = stack.pop(), stack.pop()
+            if token == '+':
+                stack.append(a + b)
+            elif token == '-':
+                stack.append(a - b)
+            elif token == '*':
+                stack.append(a * b)
+            else:
+                stack.append(int(a / b))
+        else:
+            stack.append(int(token))
+    return stack[0]`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-generate-parentheses',
@@ -867,6 +1239,21 @@ Evaluate the expression. Return an integer that represents the value of the expr
       'Can add "(" if open < n.',
       'Can add ")" if close < open.',
     ],
+    solution: 'Use backtracking. Track open and close counts. Add "(" if open < n, add ")" if close < open. Base case: both equal n.',
+    solutionCode: `def generateParenthesis(n):
+    result = []
+    def backtrack(current, open_count, close_count):
+        if len(current) == 2 * n:
+            result.append(current)
+            return
+        if open_count < n:
+            backtrack(current + '(', open_count + 1, close_count)
+        if close_count < open_count:
+            backtrack(current + ')', open_count, close_count + 1)
+    backtrack('', 0, 0)
+    return result`,
+    timeComplexity: 'O(4^n / sqrt(n))',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-daily-temperatures',
@@ -898,6 +1285,19 @@ Evaluate the expression. Return an integer that represents the value of the expr
       'Store indices in the stack.',
       'When current temp > stack top, pop and calculate days.',
     ],
+    solution: 'Use a monotonic decreasing stack of indices. When a warmer temperature is found, pop from the stack and record the difference in days.',
+    solutionCode: `def dailyTemperatures(temperatures):
+    n = len(temperatures)
+    answer = [0] * n
+    stack = []
+    for i in range(n):
+        while stack and temperatures[i] > temperatures[stack[-1]]:
+            idx = stack.pop()
+            answer[idx] = i - idx
+        stack.append(i)
+    return answer`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-car-fleet',
@@ -937,6 +1337,17 @@ Return the number of car fleets that will arrive at the destination.`,
       'Sort by position in descending order.',
       'Use a stack; a car joins the fleet ahead if its time <= fleet time.',
     ],
+    solution: 'Calculate time to target for each car. Sort by position descending. Use a stack of arrival times; if a car arrives faster than the car ahead, it merges into that fleet.',
+    solutionCode: `def carFleet(target, position, speed):
+    pairs = sorted(zip(position, speed), reverse=True)
+    stack = []
+    for pos, spd in pairs:
+        time = (target - pos) / spd
+        if not stack or time > stack[-1]:
+            stack.append(time)
+    return len(stack)`,
+    timeComplexity: 'O(n log n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'nc-largest-rectangle-histogram',
@@ -968,6 +1379,22 @@ Return the number of car fleets that will arrive at the destination.`,
       'For each bar, find the first smaller bar on left and right.',
       'Area = height * (right_bound - left_bound - 1).',
     ],
+    solution: 'Use a monotonic increasing stack. When a shorter bar is found, pop and calculate the area using the popped height with boundaries defined by the current index and new stack top.',
+    solutionCode: `def largestRectangleArea(heights):
+    stack = []
+    max_area = 0
+    for i, h in enumerate(heights):
+        start = i
+        while stack and stack[-1][1] > h:
+            idx, height = stack.pop()
+            max_area = max(max_area, height * (i - idx))
+            start = idx
+        stack.append((start, h))
+    for idx, height in stack:
+        max_area = max(max_area, height * (len(heights) - idx))
+    return max_area`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
 ];
 

@@ -14,9 +14,18 @@ export interface Problem {
   functionName: string;
   functionNameJS?: string;
   testCases: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     inputs: any[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expected: any;
   }[];
+  solution?: string;
+  solutionCode?: string;
+  timeComplexity?: string;
+  spaceComplexity?: string;
+  tags?: string[];
+  hints?: string[];
+  category?: string;
 }
 
 export const PROBLEMS: Problem[] = [
@@ -72,7 +81,18 @@ function twoSum(nums, target) {
       { inputs: [[2, 7, 11, 15], 9], expected: [0, 1] },
       { inputs: [[3, 2, 4], 6], expected: [1, 2] },
       { inputs: [[3, 3], 6], expected: [0, 1] }
-    ]
+    ],
+    solution: `Use a hash map to store each number's index as you iterate. For each element, check if (target - current) exists in the map. If yes, return both indices. This gives O(n) time instead of the brute-force O(n^2) approach.`,
+    solutionCode: `def two_sum(nums, target):
+    seen = {}
+    for i, num in enumerate(nums):
+        complement = target - num
+        if complement in seen:
+            return [seen[complement], i]
+        seen[num] = i
+    return []`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(n)',
   },
   {
     id: 'reverse-linked-list',
@@ -129,7 +149,19 @@ function reverseList(head) {
       { inputs: [[1, 2, 3, 4, 5]], expected: [5, 4, 3, 2, 1] },
       { inputs: [[1, 2]], expected: [2, 1] },
       { inputs: [[]], expected: [] }
-    ]
+    ],
+    solution: `Use an iterative approach with three pointers: prev, current, and next. For each node, save the next pointer, reverse the current node's pointer to prev, then advance prev and current. This reverses the list in a single pass.`,
+    solutionCode: `def reverse_list(head):
+    prev = None
+    current = head
+    while current:
+        next_node = current.next
+        current.next = prev
+        prev = current
+        current = next_node
+    return prev`,
+    timeComplexity: 'O(n)',
+    spaceComplexity: 'O(1)',
   },
   {
     id: 'lru-cache',
@@ -214,6 +246,28 @@ class LRUCache {
     functionNameJS: 'LRUCache',
     testCases: [
       { inputs: [2, [["put", 1, 1], ["put", 2, 2], ["get", 1], ["put", 3, 3], ["get", 2]]], expected: [null, null, 1, null, -1] }
-    ]
+    ],
+    solution: `Combine a hash map with a doubly-linked list. The hash map provides O(1) key lookup, and the doubly-linked list maintains access order so the LRU item is always at the tail. On get(), move the node to the head. On put(), add to the head and evict the tail if over capacity. Python's OrderedDict simplifies this.`,
+    solutionCode: `from collections import OrderedDict
+
+class LRUCache:
+    def __init__(self, capacity: int):
+        self.cache = OrderedDict()
+        self.capacity = capacity
+
+    def get(self, key: int) -> int:
+        if key not in self.cache:
+            return -1
+        self.cache.move_to_end(key)
+        return self.cache[key]
+
+    def put(self, key: int, value: int) -> None:
+        if key in self.cache:
+            self.cache.move_to_end(key)
+        self.cache[key] = value
+        if len(self.cache) > self.capacity:
+            self.cache.popitem(last=False)`,
+    timeComplexity: 'O(1) per operation',
+    spaceComplexity: 'O(capacity)',
   }
 ];

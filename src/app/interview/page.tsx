@@ -18,7 +18,7 @@ import { Logo } from "@/components/ui/Logo";
 import { InterviewReportDialog } from "@/components/interview/InterviewReportDialog";
 import { PracticeReportDialog } from "@/components/practice/PracticeReportDialog";
 import { WorkspaceProgressIndicator } from "@/components/workspace/WorkspaceProgressIndicator";
-import { Timer } from "@/components/interview/Timer";
+import { CountdownTimer } from "@/components/interview/CountdownTimer";
 import { Shield, GraduationCap } from "lucide-react";
 import { PROBLEMS } from "@/data/problems";
 import { COMPANIES, NEETCODE_CATEGORIES } from "@/data/company-problems";
@@ -34,8 +34,12 @@ import MermaidDiagramCanvas from "@/components/diagram/MermaidDiagramCanvas";
 import { SystemDesignPanel } from "@/components/diagram/SystemDesignPanel";
 import { SystemDesignReportDialog } from "@/components/diagram/SystemDesignReportDialog";
 import { useSystemDesignStore } from "@/lib/system-design-store";
-import { Layers } from "lucide-react";
+import { Layers, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { BehavioralAgent } from "@/components/agent/BehavioralAgent";
+import { BehavioralReportDialog } from "@/components/behavioral/BehavioralReportDialog";
+import { useBehavioralStore } from "@/lib/behavioral-store";
+import { PersonaBadge } from "@/components/interview/PersonaSelector";
 
 export default function InterviewPage() {
   const {
@@ -46,7 +50,6 @@ export default function InterviewPage() {
     clearLogs,
     workspaceId,
     setWorkspaceId,
-    workspaceStatus,
     setWorkspaceStatus,
     setWorkspaceProgress,
     setWorkspaceError,
@@ -57,13 +60,12 @@ export default function InterviewPage() {
     selectedCompanyId,
     setSelectedCompanyId,
     customProblems,
-    agentDisconnect,
     setOnEndInterview,
     startSession,
-    interviewStartTime,
     language,
     setLanguage,
-    selectedTopicId,
+    selectedPersonaId,
+    interviewStartTime,
   } = useInterviewStore();
 
   const [mounted, setMounted] = useState(false);
@@ -78,17 +80,19 @@ export default function InterviewPage() {
     setMuted(next);
   };
   const [lastError, setLastError] = useState<string | null>(null);
+  const [timerMinutes] = useState(45);
 
   const isSystemDesign = interviewMode === 'system-design';
+  const isBehavioral = interviewMode === 'behavioral';
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 0);
     return () => clearTimeout(timer);
   }, []);
 
-  // Integrity tracking (real AND practice modes - not system-design)
+  // Integrity tracking (real AND practice modes - not system-design or behavioral)
   useEffect(() => {
-    if (isSystemDesign) return; // Skip for system-design only
+    if (isSystemDesign || isBehavioral) return;
 
     const handleBlur = () => {
       useInterviewStore.getState().addBlurEvent();
@@ -97,12 +101,12 @@ export default function InterviewPage() {
 
     window.addEventListener('blur', handleBlur);
     return () => window.removeEventListener('blur', handleBlur);
-  }, [isSystemDesign]);
+  }, [isSystemDesign, isBehavioral]);
 
   // Initialize interview mode and problem (CODING INTERVIEW ONLY)
   useEffect(() => {
-    // Skip for system design mode
-    if (isSystemDesign) return;
+    // Skip for system design and behavioral modes
+    if (isSystemDesign || isBehavioral) return;
     
     // If in practice mode but no company/problem selected, user navigated directly - reset to real mode
     if (interviewMode === 'practice' && (!selectedCompanyId || !currentProblemId)) {
@@ -118,7 +122,7 @@ export default function InterviewPage() {
       setCurrentProblemId(PROBLEMS[0].id);
       setCode(PROBLEMS[0].starterCode);
     }
-  }, [isSystemDesign, interviewMode, currentProblemId, selectedCompanyId, setCurrentProblemId, setCode, setInterviewMode, setSelectedCompanyId]);
+  }, [isSystemDesign, isBehavioral, interviewMode, currentProblemId, selectedCompanyId, setCurrentProblemId, setCode, setInterviewMode, setSelectedCompanyId]);
 
   // Initialize workspace with progress tracking (CODING INTERVIEW ONLY)
   const initWorkspace = async () => {
@@ -192,9 +196,9 @@ export default function InterviewPage() {
   };
 
   useEffect(() => {
-    // Skip for system design mode
-    if (isSystemDesign) return;
-    
+    // Skip for system design and behavioral modes
+    if (isSystemDesign || isBehavioral) return;
+
     // Initialize session token first, then workspace
     initSession().then(() => initWorkspace());
 
@@ -220,7 +224,7 @@ export default function InterviewPage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSystemDesign]); // Run once
+  }, [isSystemDesign, isBehavioral]); // Run once
 
   const handleRun = async (codeToRun: string) => {
     if (!workspaceId) {
@@ -360,22 +364,26 @@ export default function InterviewPage() {
   };
 
   const handleEndInterview = async () => {
-    // Stop Gemini Live first
-    if (agentDisconnect) {
-      agentDisconnect();
+    const store = useInterviewStore.getState();
+
+    // Stop timer and mark session complete
+    store.endSession();
+
+    // Stop Gemini Live first (use getState to avoid stale closure)
+    const disconnectFn = store.agentDisconnect;
+    if (disconnectFn) {
+      disconnectFn();
     }
 
     // Delete the sandbox workspace
-    const wsId = useInterviewStore.getState().workspaceId;
+    const wsId = store.workspaceId;
     if (wsId) {
       try {
-        console.log('🗑️ Deleting workspace on end interview:', wsId);
         await authFetch('/api/sandbox/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ workspaceId: wsId }),
         });
-        console.log('✅ Workspace deleted');
         setWorkspaceId(null);
         setWorkspaceStatus('idle');
       } catch (err) {
@@ -392,7 +400,7 @@ export default function InterviewPage() {
   useEffect(() => {
     setOnEndInterview(() => handleEndInterview);
     return () => setOnEndInterview(null);
-  }, [setOnEndInterview]);
+  }, [setOnEndInterview]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLanguageChange = (newLang: string) => {
     if (newLang === language) return;
@@ -416,6 +424,11 @@ export default function InterviewPage() {
     return <SystemDesignInterviewLayout />;
   }
 
+  // BEHAVIORAL MODE - Render dedicated layout
+  if (isBehavioral) {
+    return <BehavioralInterviewLayout />;
+  }
+
   // CODING INTERVIEW MODE - Render standard layout
   return (
     <div id="interface-container" className="h-screen w-full bg-background overflow-hidden flex flex-col">
@@ -425,7 +438,7 @@ export default function InterviewPage() {
           Alexis
         </Link>
         <div className="text-xs text-muted-foreground flex items-center gap-4">
-          <Timer />
+          <CountdownTimer totalMinutes={timerMinutes} startTime={interviewStartTime} />
           <select
             value={language}
             onChange={(e) => handleLanguageChange(e.target.value)}
@@ -448,6 +461,7 @@ export default function InterviewPage() {
               <GraduationCap className="w-3 h-3" /> Practice Mode
             </span>
           )}
+          <PersonaBadge personaId={selectedPersonaId} />
           {workspaceId ? (
             <span className="text-green-500 flex items-center gap-1">
               <Shield className="w-3 h-3" /> Shield Active
@@ -534,7 +548,10 @@ export default function InterviewPage() {
  */
 function SystemDesignInterviewLayout() {
   const selectedTopicId = useSystemDesignStore((s) => s.selectedTopicId);
+  const hasHydrated = useSystemDesignStore((s) => s._hasHydrated);
   const setOnEndInterview = useSystemDesignStore((s) => s.setOnEndInterview);
+  const sdStartTime = useSystemDesignStore((s) => s.interviewStartTime);
+  const selectedPersonaId = useInterviewStore((s) => s.selectedPersonaId);
   const router = useRouter();
 
   const [mounted, setMounted] = useState(false);
@@ -552,12 +569,12 @@ function SystemDesignInterviewLayout() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Check if topic is selected
+  // Check if topic is selected (wait for hydration to avoid false redirect)
   useEffect(() => {
-    if (!selectedTopicId) {
+    if (hasHydrated && !selectedTopicId) {
       router.push('/system-design');
     }
-  }, [selectedTopicId, router]);
+  }, [hasHydrated, selectedTopicId, router]);
 
   // Initialize session
   useEffect(() => {
@@ -567,6 +584,9 @@ function SystemDesignInterviewLayout() {
   }, []);
 
   const handleEndInterview = async () => {
+    // Stop timer and mark session complete
+    useSystemDesignStore.getState().endSession();
+
     // Disconnect agent
     const agentDisconnectFn = useSystemDesignStore.getState().agentDisconnect;
     if (agentDisconnectFn) {
@@ -595,7 +615,7 @@ function SystemDesignInterviewLayout() {
           Alexis
         </Link>
         <div className="text-xs text-muted-foreground flex items-center gap-4">
-          <Timer mode="system-design" />
+          <CountdownTimer totalMinutes={45} startTime={sdStartTime} />
           <button
             onClick={toggleMute}
             className="p-1 rounded hover:bg-accent transition-colors"
@@ -608,6 +628,7 @@ function SystemDesignInterviewLayout() {
           <span className="text-primary flex items-center gap-1 bg-primary/10 px-2 py-1 rounded">
             <Layers className="w-3 h-3" /> System Design
           </span>
+          <PersonaBadge personaId={selectedPersonaId} />
         </div>
       </header>
 
@@ -650,6 +671,124 @@ function SystemDesignInterviewLayout() {
       </div>
 
       <SystemDesignReportDialog open={showReport} onOpenChange={setShowReport} />
+    </div>
+  );
+}
+
+/**
+ * Behavioral Interview Layout
+ * Voice-only interview for behavioral questions using STAR method
+ * Uses its own store (behavioral-store) and agent (BehavioralAgent)
+ */
+function BehavioralInterviewLayout() {
+  const selectedTopicId = useBehavioralStore((s) => s.selectedTopicId);
+  const hasHydrated = useBehavioralStore((s) => s._hasHydrated);
+  const setOnEndInterview = useBehavioralStore((s) => s.setOnEndInterview);
+  const behStartTime = useBehavioralStore((s) => s.interviewStartTime);
+  const selectedPersonaId = useInterviewStore((s) => s.selectedPersonaId);
+  const router = useRouter();
+
+  const [mounted, setMounted] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+
+  const toggleMute = () => {
+    const next = !soundMuted;
+    setSoundMuted(next);
+    setMuted(next);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (hasHydrated && !selectedTopicId) {
+      router.push('/behavioral');
+    }
+  }, [hasHydrated, selectedTopicId, router]);
+
+  useEffect(() => {
+    initSession().then(() => {
+      useBehavioralStore.getState().startSession();
+    });
+  }, []);
+
+  const handleEndInterview = async () => {
+    useBehavioralStore.getState().endSession();
+
+    const agentDisconnectFn = useBehavioralStore.getState().agentDisconnect;
+    if (agentDisconnectFn) {
+      agentDisconnectFn();
+    }
+
+    playSound('complete');
+    setShowReport(true);
+  };
+
+  useEffect(() => {
+    setOnEndInterview(() => handleEndInterview);
+    return () => setOnEndInterview(null);
+  }, [setOnEndInterview]);
+
+  if (!mounted) return null;
+
+  return (
+    <div id="interface-container" className="h-screen w-full bg-background overflow-hidden flex flex-col">
+      <header className="h-12 border-b flex items-center px-4 justify-between bg-card z-10">
+        <Link href="/" className="font-bold flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <Logo size={24} />
+          Alexis
+        </Link>
+        <div className="text-xs text-muted-foreground flex items-center gap-4">
+          <CountdownTimer totalMinutes={30} startTime={behStartTime} />
+          <button
+            onClick={toggleMute}
+            className="p-1 rounded hover:bg-accent transition-colors"
+            aria-label={soundMuted ? "Unmute sounds" : "Mute sounds"}
+            title={soundMuted ? "Unmute sounds" : "Mute sounds"}
+          >
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
+          <ThemeToggle />
+          <span className="text-primary flex items-center gap-1 bg-primary/10 px-2 py-1 rounded">
+            <Users className="w-3 h-3" /> Behavioral
+          </span>
+          <PersonaBadge personaId={selectedPersonaId} />
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-hidden flex">
+        {/* Main Content: Centered voice panel */}
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="w-full max-w-2xl space-y-6">
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl font-bold text-foreground">Behavioral Interview</h2>
+              <p className="text-sm text-muted-foreground">
+                Speak naturally with Alexis. Share specific examples from your experience using the STAR method.
+              </p>
+            </div>
+            <BehavioralAgent />
+          </div>
+        </div>
+
+        {/* Right Panel: Transcript & Controls */}
+        <div className="w-[380px] border-l bg-card flex flex-col h-full overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden border-b">
+            <TranscriptPanel mode="behavioral" />
+          </div>
+
+          <Controls
+            onRun={() => {}}
+            onEndInterview={handleEndInterview}
+            isRunning={false}
+            mode="behavioral"
+          />
+        </div>
+      </div>
+
+      <BehavioralReportDialog open={showReport} onOpenChange={setShowReport} />
     </div>
   );
 }

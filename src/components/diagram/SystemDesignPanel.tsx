@@ -75,6 +75,17 @@ export function SystemDesignPanel() {
 
   const topic = selectedTopicId ? getSystemDesignTopic(selectedTopicId) : null;
 
+  // Hooks must be called unconditionally (before any early return)
+  const nodeLabels = useMemo(() => extractNodeLabels(mermaidDiagram), [mermaidDiagram]);
+
+  const expectedComponents = useMemo(() => topic?.expectedComponents ?? [], [topic]);
+  const componentMatches = useMemo(() => {
+    return expectedComponents.map((comp) => ({
+      name: comp,
+      matchedLabel: fuzzyMatchComponent(comp, nodeLabels),
+    }));
+  }, [expectedComponents, nodeLabels]);
+
   if (!topic) {
     return (
       <div className="h-full flex items-center justify-center text-muted-foreground p-4">
@@ -85,17 +96,6 @@ export function SystemDesignPanel() {
 
   // Count components from Mermaid diagram
   const { nodes: nodeCount } = countMermaidComponents(mermaidDiagram);
-
-  // Extract node labels for fuzzy matching
-  const nodeLabels = useMemo(() => extractNodeLabels(mermaidDiagram), [mermaidDiagram]);
-
-  // Fuzzy-match each expected component against actual node labels
-  const componentMatches = useMemo(() => {
-    return topic.expectedComponents.map((comp) => ({
-      name: comp,
-      matchedLabel: fuzzyMatchComponent(comp, nodeLabels),
-    }));
-  }, [topic.expectedComponents, nodeLabels]);
 
   const matchedCount = componentMatches.filter((c) => c.matchedLabel !== null).length;
 

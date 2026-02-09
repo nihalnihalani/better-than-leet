@@ -2,10 +2,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Logo } from "@/components/ui/Logo";
-import { Mic, Sparkles, Lock, GraduationCap, ListChecks, MessageSquare, BarChart3, ArrowRight, Layers } from "lucide-react";
+import { Mic, Sparkles, Lock, GraduationCap, ListChecks, MessageSquare, BarChart3, ArrowRight, Layers, Users } from "lucide-react";
 import Image from "next/image";
 import { StartInterviewButton } from "@/components/interview/StartInterviewButton";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { StreakXpBadge } from "@/components/dashboard/StreakXpBadge";
 
 export default function Home() {
   return (
@@ -23,6 +24,7 @@ export default function Home() {
             BetterThanLeet
           </div>
           <div className="flex items-center gap-2">
+            <StreakXpBadge />
             <ThemeToggle />
             <StartInterviewButton size="default" showIcon={false} />
           </div>
@@ -48,7 +50,7 @@ export default function Home() {
           </h1>
 
           <p className="text-xl text-foreground/80 dark:text-foreground/60 max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
-            LeetCode can't ask follow-up questions. Alexis can. Experience voice-first technical interviews
+            LeetCode can&apos;t ask follow-up questions. Alexis can. Experience voice-first technical interviews
             powered by Gemini 3 Pro with real-time coding and instant feedback.
           </p>
 
@@ -64,6 +66,18 @@ export default function Home() {
               <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
                 <Layers className="mr-2 w-5 h-5" />
                 System Design
+              </Button>
+            </Link>
+            <Link href="/behavioral">
+              <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
+                <Users className="mr-2 w-5 h-5" />
+                Behavioral
+              </Button>
+            </Link>
+            <Link href="/dashboard">
+              <Button variant="outline" size="lg" className="h-14 px-8 text-lg rounded-full transition-all duration-300">
+                <BarChart3 className="mr-2 w-5 h-5" />
+                Dashboard
               </Button>
             </Link>
             <Link href="https://github.com/daytonaio/sdk" target="_blank">
@@ -83,7 +97,7 @@ export default function Home() {
               </div>
               <CardTitle className="text-xl">Voice-First AI</CardTitle>
               <CardDescription className="text-base">
-                Converse naturally with Alexis using Gemini Live's native voice synthesis. No typing required.
+                Converse naturally with Alexis using Gemini Live&apos;s native voice synthesis. No typing required.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -118,9 +132,9 @@ export default function Home() {
           <h2 className="text-3xl font-bold mb-12">How It Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
             {[
-              { step: 1, icon: ListChecks, title: "Choose Your Challenge", desc: "Select from curated problems or import your own from LeetCode." },
-              { step: 2, icon: MessageSquare, title: "Talk to Alexis", desc: "Have a real-time voice conversation while you code your solution." },
-              { step: 3, icon: BarChart3, title: "Get Your Report", desc: "Receive detailed performance analysis and actionable feedback." },
+              { step: 1, icon: ListChecks, title: "Choose Your Challenge", desc: "Pick a coding problem, system design topic, or behavioral question. Browse company-specific guides." },
+              { step: 2, icon: MessageSquare, title: "Talk to Alexis", desc: "Have a real-time voice conversation while you code, diagram, or answer. Choose your interviewer persona." },
+              { step: 3, icon: BarChart3, title: "Track Your Growth", desc: "Get detailed reports, track your readiness score, and build your streak on the dashboard." },
             ].map((item, i) => (
               <div key={i} className="flex flex-col items-center md:items-start gap-3 text-center md:text-left relative">
                 <div className="w-10 h-10 rounded-full bg-blue-50 dark:bg-primary/20 flex items-center justify-center text-blue-600 dark:text-primary font-bold text-sm">

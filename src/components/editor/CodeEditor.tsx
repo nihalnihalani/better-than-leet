@@ -74,9 +74,6 @@ export function CodeEditor({
 
     // Use Monaco's native onDidPaste event for accurate paste detection (real + practice, not system-design)
     editorInstance.onDidPaste((e) => {
-      const pastedTextLength = e.range.endColumn - e.range.startColumn +
-        (e.range.endLineNumber - e.range.startLineNumber) * 50; // Approximate length for multi-line pastes
-
       // Get the actual pasted text length from the model
       const model = editorInstance.getModel();
       if (model) {

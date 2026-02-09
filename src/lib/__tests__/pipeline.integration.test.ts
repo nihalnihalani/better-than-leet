@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { CodeHistory, codeHistory } from '../code-history';
+import { CodeHistory } from '../code-history';
 import { ReportGenerator } from '../reporting';
 import { validateRequest, ExecuteCodeRequestSchema, AutoFixRequestSchema } from '../schemas';
 

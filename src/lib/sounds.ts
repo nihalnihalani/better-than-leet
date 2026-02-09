@@ -8,6 +8,7 @@ let muted = false;
 
 function getAudioContext(): AudioContext {
     if (!audioCtx) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
     return audioCtx;
@@ -30,7 +31,7 @@ function playTone(frequency: number, duration: number, startTime: number, type: 
     osc.stop(startTime + duration);
 }
 
-export type SoundType = 'success' | 'error' | 'ready' | 'complete';
+export type SoundType = 'success' | 'error' | 'ready' | 'complete' | 'warning';
 
 export function playSound(type: SoundType) {
     if (muted) return;
@@ -66,6 +67,12 @@ export function playSound(type: SoundType) {
                 playTone(523.25, 0.15, now, 'sine', 0.1);
                 playTone(659.25, 0.15, now + 0.15, 'sine', 0.1);
                 playTone(783.99, 0.3, now + 0.3, 'sine', 0.1);
+                break;
+
+            case 'warning':
+                // Two quick descending tones (A5 → E5)
+                playTone(880, 0.12, now, 'triangle', 0.1);
+                playTone(659.25, 0.12, now + 0.15, 'triangle', 0.1);
                 break;
         }
     } catch {

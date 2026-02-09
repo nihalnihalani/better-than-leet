@@ -11,6 +11,7 @@ import { useInterviewStore } from '@/lib/store';
 import { useSystemDesignStore } from '@/lib/system-design-store';
 import { SYSTEM_DESIGN_TOPICS } from '@/data/system-design-topics';
 import { ArrowLeft, Layers, ArrowRight, Search } from 'lucide-react';
+import { PersonaSelector } from '@/components/interview/PersonaSelector';
 
 type DifficultyFilter = 'All' | 'Medium' | 'Hard';
 
@@ -29,8 +30,8 @@ export default function SystemDesignPage() {
     return matchesDifficulty && matchesSearch;
   });
 
-  const { setInterviewMode, setSelectedTopicId: setMainStoreTopicId } = useInterviewStore();
-  const { setSelectedTopicId: setSDStoreTopicId, clearDiagram } = useSystemDesignStore();
+  const { setInterviewMode, setSelectedTopicId: setMainStoreTopicId, selectedPersonaId, setSelectedPersonaId } = useInterviewStore();
+  const { setSelectedTopicId: setSDStoreTopicId, clearDiagram, clearTranscript } = useSystemDesignStore();
 
   const handleStart = () => {
     if (!selectedTopicId) return;
@@ -39,9 +40,10 @@ export default function SystemDesignPage() {
     setInterviewMode('system-design');
     setMainStoreTopicId(selectedTopicId);
     
-    // Set topic and clear diagram in system design store
+    // Set topic and clear previous session data in system design store
     setSDStoreTopicId(selectedTopicId);
     clearDiagram();
+    clearTranscript();
 
     router.push('/interview');
   };
@@ -157,6 +159,14 @@ export default function SystemDesignPage() {
                 </Card>
               );
             })}
+          </div>
+
+          {/* Persona Selector */}
+          <div className="mt-8">
+            <PersonaSelector
+              selectedPersonaId={selectedPersonaId}
+              onSelect={setSelectedPersonaId}
+            />
           </div>
 
           <div className="flex justify-center mt-10">

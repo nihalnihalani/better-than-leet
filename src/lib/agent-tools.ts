@@ -5,7 +5,8 @@ import { COMPANIES, CompanyProblem, getAllCompanyProblems, NEETCODE_CATEGORIES }
 import { authFetch } from '@/lib/api-client';
 
 // Wrapper to catch tool errors and prevent disconnections
-const wrapTool = (name: string, fn: Function) => async (...args: any[]) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const wrapTool = (name: string, fn: (...a: any[]) => any) => async (...args: any[]) => {
     try {
         console.log(`🔧 Tool called: ${name}`, args.length > 0 ? args[0] : '(no args)');
         const result = await fn(...args);

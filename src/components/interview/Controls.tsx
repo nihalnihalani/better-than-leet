@@ -22,7 +22,7 @@ interface ControlsProps {
   isRunning: boolean;
   isFixing?: boolean;
   hasError?: boolean;
-  mode?: 'coding' | 'system-design';
+  mode?: 'coding' | 'system-design' | 'behavioral';
 }
 
 export function Controls({
@@ -34,11 +34,11 @@ export function Controls({
     hasError,
     mode = 'coding',
 }: ControlsProps) {
-  const isSystemDesign = mode === 'system-design';
+  const isVoiceOnly = mode === 'system-design' || mode === 'behavioral';
 
   return (
     <div className="flex flex-col gap-2 p-4">
-      {!isSystemDesign && (
+      {!isVoiceOnly && (
         <Button
           onClick={onRun}
           disabled={isRunning}
@@ -51,7 +51,7 @@ export function Controls({
         </Button>
       )}
 
-      {!isSystemDesign && hasError && onAutoFix && (
+      {!isVoiceOnly && hasError && onAutoFix && (
         <Button
             onClick={onAutoFix}
             disabled={isFixing}
@@ -68,7 +68,7 @@ export function Controls({
         <AlertDialogTrigger asChild>
           <Button
             variant="destructive"
-            className={`w-full ${!isSystemDesign ? 'mt-4' : ''}`}
+            className={`w-full ${!isVoiceOnly ? 'mt-4' : ''}`}
             aria-label="End interview and download report"
           >
             <FileDown className="w-4 h-4 mr-2" aria-hidden="true" />
@@ -79,9 +79,7 @@ export function Controls({
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to end the interview?</AlertDialogTitle>
             <AlertDialogDescription>
-              {isSystemDesign
-                ? 'Your system design interview will be evaluated and a report will be generated. This action cannot be undone.'
-                : 'Your interview will be evaluated and a report will be generated. This action cannot be undone.'}
+              Your interview will be evaluated and a report will be generated. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

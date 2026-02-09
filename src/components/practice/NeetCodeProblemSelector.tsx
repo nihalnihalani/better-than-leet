@@ -10,7 +10,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { NEETCODE_CATEGORIES } from '@/data/neetcode-problems';
-import { CompanyProblem } from '@/data/company-problems';
 import { cn } from '@/lib/utils';
 
 interface NeetCodeProblemSelectorProps {
@@ -98,7 +97,7 @@ export function NeetCodeProblemSelector({
             className="pl-10"
           />
         </div>
-        <Select value={difficultyFilter} onValueChange={(v: any) => setDifficultyFilter(v)}>
+        <Select value={difficultyFilter} onValueChange={(v: string) => setDifficultyFilter(v as 'all' | 'Easy' | 'Medium' | 'Hard')}>
           <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Difficulty" />
           </SelectTrigger>

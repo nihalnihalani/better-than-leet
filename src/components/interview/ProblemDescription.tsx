@@ -65,7 +65,7 @@ export function ProblemDescription() {
             setCode(randomProblem.starterCode);
             setCurrentProblemId(randomProblem.id);
         }
-    }, [isPracticeMode, currentProblemId]);
+    }, [isPracticeMode, currentProblemId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleReset = () => {
         if (problem) {

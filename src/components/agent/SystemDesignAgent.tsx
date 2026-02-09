@@ -1,31 +1,21 @@
 'use client';
 
 import { useSystemDesignStore } from '@/lib/system-design-store';
+import { useInterviewStore } from '@/lib/store';
 import { Button } from "@/components/ui/button";
 import { StatusIndicator } from './StatusIndicator';
 import { Visualizer } from './Visualizer';
 import { ThinkingIndicator } from './ThinkingIndicator';
-import { Mic, MicOff, Layers } from 'lucide-react';
+import { Mic, MicOff, Layers, AlertCircle } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { getSystemDesignTools } from '@/lib/system-design-agent-tools';
 import { GeminiLiveClient, ConnectionStatus } from '@/lib/gemini-live-client';
 import { authFetch, initSession } from '@/lib/api-client';
 import { extractMermaidBlocks, validateMermaidSyntax } from '@/lib/mermaid-parser';
 
-const DEMO_DIAGRAM = `graph LR
-    Client[Web Client] -->|HTTPS| LB{Load Balancer}
-    LB --> API1[API Server 1]
-    LB --> API2[API Server 2]
-    API1 --> Cache{{Redis Cache}}
-    API2 --> Cache
-    API1 --> DB[(PostgreSQL Primary)]
-    API2 --> DB
-    API1 -->|Async Jobs| Queue>Message Queue]
-    Queue --> Worker[Background Worker]
-    Worker --> S3[S3 Storage]`;
-
 export function SystemDesignAgent() {
-    const { selectedTopicId, setAgentDisconnect, setMermaidDiagram } = useSystemDesignStore();
+    const { setAgentDisconnect } = useSystemDesignStore();
+    const hasHydrated = useSystemDesignStore((s) => s._hasHydrated);
     const [isThinking, setIsThinking] = useState(false);
     const [currentAction, setCurrentAction] = useState<string>('');
 
@@ -37,13 +27,15 @@ export function SystemDesignAgent() {
     const [wasInterrupted, setWasInterrupted] = useState(false);
     const [clientReady, setClientReady] = useState(false);
     const [isMicMuted, setIsMicMuted] = useState(false);
+    const [initError, setInitError] = useState<string | null>(null);
     const clientRef = useRef<GeminiLiveClient | null>(null);
     const hasConnectedOnceRef = useRef(false);
-    const selectedTopicIdRef = useRef(selectedTopicId);
-    selectedTopicIdRef.current = selectedTopicId;
+    const shouldAutoReconnectRef = useRef(false);
 
     // Tool handler
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (functionCalls.some((c: any) => c.name === 'end_interview') && clientRef.current) {
             clientRef.current.markInterviewEnding();
         }
@@ -57,6 +49,7 @@ export function SystemDesignAgent() {
                 const name = call.name;
                 const args = call.args || {};
                 const id = call.id;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const fn = (toolFunctions as any)[name];
 
                 if (fn) {
@@ -76,124 +69,145 @@ export function SystemDesignAgent() {
         return responses;
     }, []);
 
-    // Initialize Client
-    useEffect(() => {
-        let cancelled = false;
+    // Initialize Client — creates GeminiLiveClient with API key
+    const initClient = useCallback(async (): Promise<boolean> => {
+        setInitError(null);
 
-        async function initClient() {
-            // Ensure session token is available before fetching API key
-            await initSession();
+        // Ensure session token is available before fetching API key
+        await initSession();
 
-            let apiKey: string | undefined;
-            try {
-                const res = await authFetch('/api/gemini/session');
-                const data = await res.json();
-                if (data.data?.apiKey) {
-                    apiKey = data.data.apiKey;
-                }
-            } catch {
-                // Server fetch failed
+        let apiKey: string | undefined;
+        try {
+            const res = await authFetch('/api/gemini/session');
+            const data = await res.json();
+            if (data.data?.apiKey) {
+                apiKey = data.data.apiKey;
             }
-
-            if (!apiKey || cancelled) {
-                if (!apiKey) {
-                    console.error("Gemini API Key missing. Set GEMINI_API_KEY in .env.local");
-                }
-                return;
-            }
-
-            const client = new GeminiLiveClient(apiKey.trim(), 'system-design');
-
-            const topicId = selectedTopicIdRef.current;
-            if (topicId) {
-                client.setSystemDesignTopic(topicId);
-            }
-
-            client.onStatusChange = (s) => setStatus(s);
-            client.onToolsCall = handleToolsCall;
-            client.onVolume = (vol) => {
-                setVolume(vol);
-                setIsSpeaking(vol > 0.01);
-            };
-            client.onError = (err) => {
-                console.error("System Design Client Error:", err);
-                setIsThinking(false);
-                setCurrentAction('');
-            };
-            client.onMessage = (msg) => {
-                const store = useSystemDesignStore.getState();
-                store.addTranscriptMessage('agent', msg, 'audio');
-
-                // Extract and validate Mermaid diagram blocks
-                const mermaidBlocks = extractMermaidBlocks(msg);
-
-                if (mermaidBlocks.length > 0) {
-                    const latestDiagram = mermaidBlocks[mermaidBlocks.length - 1];
-                    const validation = validateMermaidSyntax(latestDiagram);
-
-                    if (validation.valid) {
-                        store.setMermaidDiagram(latestDiagram);
-                        store.addTranscriptMessage('agent', '[System: Diagram successfully updated]', 'text');
-                    } else {
-                        store.addTranscriptMessage('agent', `[System: Diagram update failed - ${validation.error}]`, 'text');
-                    }
-                }
-            };
-            client.onUserTranscript = (text) => {
-                useSystemDesignStore.getState().addTranscriptMessage('user', text, 'audio');
-            };
-            client.onInterrupted = () => {
-                setWasInterrupted(true);
-                setIsModelSpeaking(false);
-                setIsThinking(false);
-                setCurrentAction('');
-                setTimeout(() => setWasInterrupted(false), 3000);
-            };
-            client.onTurnEnd = () => {
-                setIsModelSpeaking(false);
-                setIsThinking(false);
-            };
-            client.onModelSpeaking = (speaking) => {
-                setIsModelSpeaking(speaking);
-                if (speaking) setCurrentAction('Alexis speaking...');
-            };
-            client.onNoResponse = () => {};
-
-            client.onSetupComplete = () => {
-                setTimeout(() => {
-                    if (client.isConnected()) {
-                        client.sendText(`[SYSTEM] RESPOND NOW. Your response is what the candidate hears directly.
-
-DO NOT say: "I'm crafting a response" or "My response is ready"
-DO NOT narrate your process
-DO SAY THIS EXACTLY:
-
-"Hey! Welcome to Alexis. Let's design this system together. Here's the starting architecture:
-
-\`\`\`mermaid
-graph LR
-    Client[Web Client] --> API[API Server]
-    API --> DB[(Database)]
-\`\`\`
-
-This shows a client connecting to an API server which talks to a database. What features should we add?"
-
-OUTPUT THIS NOW. Not a description of it - the actual greeting and diagram.`);
-                    }
-                }, 1500);
-            };
-
-            clientRef.current = client;
-            setClientReady(true);
-
-            setAgentDisconnect(() => {
-                if (clientRef.current) {
-                    clientRef.current.disconnect();
-                }
-            });
+        } catch {
+            setInitError('Failed to reach server. Check your connection.');
+            return false;
         }
 
-        initClient();
+        if (!apiKey) {
+            console.error("Gemini API Key missing. Set GEMINI_API_KEY in .env.local");
+            setInitError('Gemini API key not configured. Set GEMINI_API_KEY in .env.local');
+            return false;
+        }
+
+        const client = new GeminiLiveClient(apiKey.trim(), 'system-design');
+
+        // Read topic from the now-hydrated store (guaranteed available)
+        const topicId = useSystemDesignStore.getState().selectedTopicId;
+        if (topicId) {
+            client.setSystemDesignTopic(topicId);
+        }
+
+        // Set persona if selected
+        const personaId = useInterviewStore.getState().selectedPersonaId;
+        if (personaId) {
+            const { getPersona } = await import('@/data/interviewer-personas');
+            const persona = getPersona(personaId);
+            if (persona) {
+                client.setPersona(persona.promptAddition);
+            }
+        }
+
+        client.onStatusChange = (s) => setStatus(s);
+        client.onToolsCall = handleToolsCall;
+        client.onVolume = (vol) => {
+            setVolume(vol);
+            setIsSpeaking(vol > 0.01);
+        };
+        client.onError = (err) => {
+            console.error("System Design Client Error:", err);
+            setInitError(err.message);
+            setIsThinking(false);
+            setCurrentAction('');
+        };
+        client.onMessage = (msg) => {
+            const store = useSystemDesignStore.getState();
+            store.addTranscriptMessage('agent', msg, 'audio');
+
+            // Extract and validate Mermaid diagram blocks
+            const mermaidBlocks = extractMermaidBlocks(msg);
+
+            if (mermaidBlocks.length > 0) {
+                const latestDiagram = mermaidBlocks[mermaidBlocks.length - 1];
+                const validation = validateMermaidSyntax(latestDiagram);
+
+                if (validation.valid) {
+                    store.setMermaidDiagram(latestDiagram);
+                    store.addTranscriptMessage('agent', '[System: Diagram successfully updated]', 'text');
+                } else {
+                    store.addTranscriptMessage('agent', `[System: Diagram update failed - ${validation.error}]`, 'text');
+                }
+            }
+        };
+        client.onUserTranscript = (text) => {
+            useSystemDesignStore.getState().addTranscriptMessage('user', text, 'audio');
+        };
+        client.onInterrupted = () => {
+            setWasInterrupted(true);
+            setIsModelSpeaking(false);
+            setIsThinking(false);
+            setCurrentAction('');
+            setTimeout(() => setWasInterrupted(false), 3000);
+        };
+        client.onTurnEnd = () => {
+            setIsModelSpeaking(false);
+            setIsThinking(false);
+        };
+        client.onModelSpeaking = (speaking) => {
+            setIsModelSpeaking(speaking);
+            if (speaking) setCurrentAction('Alexis speaking...');
+        };
+        client.onNoResponse = () => {};
+
+        client.onSetupComplete = () => {
+            setInitError(null);
+            setTimeout(() => {
+                if (client.isConnected()) {
+                    if (hasConnectedOnceRef.current) {
+                        // Reconnection — recover context without re-introducing
+                        client.sendText(`[CONTEXT RECOVERY] The connection was briefly interrupted. Resume the interview from where we left off. Do NOT re-introduce the topic or re-greet the candidate.`);
+                    } else {
+                        // First connection — tell Gemini to follow its system instruction
+                        client.sendText(`[SYSTEM] The interview has started. Greet the candidate, present the system design problem as described in your instructions, and ask them to begin by defining requirements or proposing their approach. Do NOT output a Mermaid diagram yet — wait for the candidate to describe components first.`);
+                        hasConnectedOnceRef.current = true;
+                    }
+                }
+            }, 1500);
+        };
+
+        client.onDisconnect = () => {
+            // Involuntary disconnect — allow auto-reconnect
+            shouldAutoReconnectRef.current = true;
+        };
+
+        clientRef.current = client;
+        setClientReady(true);
+
+        setAgentDisconnect(() => {
+            if (clientRef.current) {
+                clientRef.current.disconnect();
+            }
+        });
+
+        return true;
+    }, [handleToolsCall, setAgentDisconnect]);
+
+    // Auto-initialize when hydration completes
+    useEffect(() => {
+        if (!hasHydrated) return;
+
+        let cancelled = false;
+
+        initClient().then((success) => {
+            if (cancelled) return;
+            if (!success) {
+                console.error("Client initialization failed");
+            }
+        });
 
         return () => {
             cancelled = true;
@@ -205,18 +219,24 @@ OUTPUT THIS NOW. Not a description of it - the actual greeting and diagram.`);
             setAgentDisconnect(null);
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [hasHydrated]);
 
     const handleStart = useCallback(async () => {
-        if (!clientRef.current) return;
+        setInitError(null);
+
+        // If client was never created (init failed), re-attempt initialization
+        if (!clientRef.current) {
+            const success = await initClient();
+            if (!success || !clientRef.current) return;
+        }
 
         try {
             await clientRef.current.connect();
-            hasConnectedOnceRef.current = true;
         } catch (err) {
             console.error("Error connecting:", err);
+            setInitError(err instanceof Error ? err.message : 'Connection failed');
         }
-    }, []);
+    }, [initClient]);
 
     const handleStop = useCallback(() => {
         if (clientRef.current) {
@@ -231,15 +251,27 @@ OUTPUT THIS NOW. Not a description of it - the actual greeting and diagram.`);
         }
     }, []);
 
-    // Auto-start ONCE when client is ready
+    // Auto-start when client is ready (first connect or auto-reconnect after drop)
     useEffect(() => {
-        if (status === 'disconnected' && clientReady && clientRef.current && !hasConnectedOnceRef.current) {
-            handleStart();
+        const canAutoStart = (status === 'disconnected' || status === 'error') && clientReady && clientRef.current;
+        if (canAutoStart) {
+            if (!hasConnectedOnceRef.current || shouldAutoReconnectRef.current) {
+                shouldAutoReconnectRef.current = false;
+                handleStart();
+            }
         }
     }, [status, clientReady, handleStart]);
 
     return (
         <div id="agent-container" className="flex flex-col gap-4">
+            {/* Init/Connection Error */}
+            {initError && status !== 'connected' && (
+                <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded border border-red-500/30 flex items-center gap-2">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{initError}</span>
+                </div>
+            )}
+
             {/* Thinking Indicator */}
             {(isThinking || isModelSpeaking) && (
                 <ThinkingIndicator isThinking={isThinking || isModelSpeaking} currentAction={currentAction} />

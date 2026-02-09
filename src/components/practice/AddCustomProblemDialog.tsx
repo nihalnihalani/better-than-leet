@@ -105,7 +105,7 @@ export function AddCustomProblemDialog({ open, onOpenChange }: AddCustomProblemD
         setSuccessMessage(problem.message || 'Problem imported successfully! Review the details below and click "Add Problem" to save.');
         setError(null);
       }
-    } catch (err) {
+    } catch {
       setError('Failed to connect to the server. Please try again.');
       setSuccessMessage(null);
     } finally {
@@ -178,7 +178,7 @@ export function AddCustomProblemDialog({ open, onOpenChange }: AddCustomProblemD
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={mode} onValueChange={(v: any) => setMode(v)}>
+        <Tabs value={mode} onValueChange={(v: string) => setMode(v as 'url' | 'manual')}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="url" className="gap-2">
               <Link2 className="h-4 w-4" />
@@ -241,7 +241,7 @@ export function AddCustomProblemDialog({ open, onOpenChange }: AddCustomProblemD
                 <Label htmlFor="difficulty">Difficulty</Label>
                 <Select
                   value={formData.difficulty}
-                  onValueChange={(v: any) => setFormData({ ...formData, difficulty: v })}
+                  onValueChange={(v: string) => setFormData({ ...formData, difficulty: v as 'Easy' | 'Medium' | 'Hard' })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -309,7 +309,7 @@ export function AddCustomProblemDialog({ open, onOpenChange }: AddCustomProblemD
                 rows={4}
               />
               <p className="text-xs text-muted-foreground">
-                Format: Array of objects with "inputs" (array) and "expected" (any) fields
+                Format: Array of objects with &ldquo;inputs&rdquo; (array) and &ldquo;expected&rdquo; (any) fields
               </p>
             </div>
 

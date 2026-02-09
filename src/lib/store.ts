@@ -27,6 +27,7 @@ interface TestResult {
   testsPassed: number;
   testsTotal: number;
   executionTime?: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   details: any;
 }
 
@@ -52,6 +53,7 @@ export interface CustomProblem {
   constraints: string[];
   starterCode: string;
   functionName: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   testCases: { inputs: any[]; expected: any }[];
   tags: string[];
   hints: string[];
@@ -132,13 +134,17 @@ interface InterviewState {
   toggleWizardMode: () => void;
 
   // Practice Interview Mode
-  interviewMode: 'real' | 'practice' | 'system-design';
-  setInterviewMode: (mode: 'real' | 'practice' | 'system-design') => void;
+  interviewMode: 'real' | 'practice' | 'system-design' | 'behavioral';
+  setInterviewMode: (mode: 'real' | 'practice' | 'system-design' | 'behavioral') => void;
   selectedCompanyId: string | null;
   setSelectedCompanyId: (id: string | null) => void;
   practiceHistory: PracticeSession[];
   addPracticeSession: (session: PracticeSession) => void;
   clearPracticeHistory: () => void;
+
+  // Interviewer Persona
+  selectedPersonaId: string | null;
+  setSelectedPersonaId: (id: string | null) => void;
 
   // System Design (minimal - just for routing)
   selectedTopicId: string | null;
@@ -166,7 +172,7 @@ export const useInterviewStore = create<InterviewState>()(
       status: 'idle',
       interviewStartTime: null,
       startSession: () => set({ status: 'active', interviewStartTime: Date.now() }),
-      endSession: () => set({ status: 'completed' }),
+      endSession: () => set({ status: 'completed', interviewStartTime: null }),
       setStatus: (status) => set({ status }),
 
       // Code
@@ -187,11 +193,12 @@ export const useInterviewStore = create<InterviewState>()(
       setWorkspaceProgress: (workspaceProgress) => set({ workspaceProgress }),
       setWorkspaceError: (workspaceError) => set({ workspaceError }),
 
-      // Console
+      // Console (capped at 200 entries to prevent memory leaks)
       consoleOutput: [],
-      addLog: (log, type = 'system') => set((state) => ({
-        consoleOutput: [...state.consoleOutput, { type, content: log }]
-      })),
+      addLog: (log, type = 'system') => set((state) => {
+        const updated = [...state.consoleOutput, { type, content: log }];
+        return { consoleOutput: updated.length > 200 ? updated.slice(-200) : updated };
+      }),
       clearLogs: () => set({ consoleOutput: [] }),
 
       // Analysis
@@ -232,23 +239,25 @@ export const useInterviewStore = create<InterviewState>()(
         return `Integrity Report: User has left the tab ${blurCount} times. Detected ${pasteCount} paste events, with ${largePasteEvents.length} large pastes (>${LARGE_PASTE_THRESHOLD} chars).`;
       },
 
-      // Conversation Transcript
+      // Conversation Transcript (capped at 500 messages to prevent memory leaks)
       transcript: [],
-      addTranscriptMessage: (speaker, message, type = 'audio') => set((state) => ({
-        transcript: [...state.transcript, {
+      addTranscriptMessage: (speaker, message, type = 'audio') => set((state) => {
+        const updated = [...state.transcript, {
           timestamp: Date.now(),
           speaker,
           message,
           type
-        }]
-      })),
+        }];
+        return { transcript: updated.length > 500 ? updated.slice(-500) : updated };
+      }),
       clearTranscript: () => set({ transcript: [] }),
 
-      // Test Results
+      // Test Results (capped at 100 entries)
       testResults: [],
-      addTestResult: (result) => set((state) => ({
-        testResults: [...state.testResults, result]
-      })),
+      addTestResult: (result) => set((state) => {
+        const updated = [...state.testResults, result];
+        return { testResults: updated.length > 100 ? updated.slice(-100) : updated };
+      }),
       clearTestResults: () => set({ testResults: [] }),
 
       // Wizard Mode
@@ -265,6 +274,10 @@ export const useInterviewStore = create<InterviewState>()(
         practiceHistory: [...state.practiceHistory, session]
       })),
       clearPracticeHistory: () => set({ practiceHistory: [] }),
+
+      // Interviewer Persona
+      selectedPersonaId: null,
+      setSelectedPersonaId: (selectedPersonaId) => set({ selectedPersonaId }),
 
       // System Design (minimal - just for routing)
       selectedTopicId: null,
@@ -357,6 +370,7 @@ export const useInterviewStore = create<InterviewState>()(
         practiceHistory: state.practiceHistory, // Persist practice history
         customProblems: state.customProblems, // Persist custom problems
         selectedTopicId: state.selectedTopicId, // Persist selected topic for system design routing
+        selectedPersonaId: state.selectedPersonaId, // Persist selected interviewer persona
       }),
     }
   )

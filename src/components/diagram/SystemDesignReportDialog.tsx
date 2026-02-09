@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useProgressStore, xpForSession } from '@/lib/progress-store';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
   XCircle,
   Clock,
   Copy,
+  Check,
   Download,
   BarChart3,
   Network,
@@ -25,10 +27,12 @@ import {
   Search,
   TrendingUp,
   ArrowRight,
+  RotateCcw,
 } from 'lucide-react';
 import { useSystemDesignStore } from '@/lib/system-design-store';
 import { getSystemDesignTopic } from '@/data/system-design-topics';
 import { countMermaidComponents } from '@/lib/mermaid-parser';
+import { SpeechAnalyticsPanel, getSpeechAnalyticsSummary } from '@/components/analytics/SpeechAnalyticsPanel';
 
 interface SystemDesignReportDialogProps {
   open: boolean;
@@ -122,8 +126,8 @@ function calcCommunicationScore(
   messageCount: number,
   avgMessageLength: number,
 ): number {
-  // At least 6 messages shows decent back-and-forth; 15+ is great
-  const countScore = Math.min(50, Math.round((messageCount / 15) * 50));
+  // At least 6 messages shows decent back-and-forth; 20+ is great (candidate drives more in FAANG style)
+  const countScore = Math.min(50, Math.round((messageCount / 20) * 50));
   // Average message length of ~80 chars is reasonable, 200+ is very detailed
   const lengthScore = Math.min(50, Math.round((avgMessageLength / 200) * 50));
   return countScore + lengthScore;
@@ -176,7 +180,7 @@ export function SystemDesignReportDialog({
   } = useSystemDesignStore();
 
   const topic = selectedTopicId ? getSystemDesignTopic(selectedTopicId) : undefined;
-  const expectedComponents = topic?.expectedComponents ?? [];
+  const expectedComponents = useMemo(() => topic?.expectedComponents ?? [], [topic]);
 
   // Derived metrics
   const { nodes: nodeCount, edges: edgeCount } = useMemo(
@@ -200,10 +204,16 @@ export function SystemDesignReportDialog({
     return Math.round(totalLen / userMessages.length);
   }, [userMessages]);
 
-  const timeSpent = useMemo(() => {
-    if (!interviewStartTime) return 0;
-    return Date.now() - interviewStartTime;
-  }, [interviewStartTime]);
+  // Snapshot the duration when the dialog first opens (interviewStartTime may be cleared by endSession)
+  const timeSpentRef = useRef(0);
+  if (open && interviewStartTime && timeSpentRef.current === 0) {
+    timeSpentRef.current = Date.now() - interviewStartTime;
+  }
+  // Reset when dialog closes so next session gets a fresh snapshot
+  useEffect(() => {
+    if (!open) timeSpentRef.current = 0;
+  }, [open]);
+  const timeSpent = timeSpentRef.current;
 
   // Category scores
   const categoryScores: CategoryScore[] = useMemo(
@@ -255,6 +265,32 @@ export function SystemDesignReportDialog({
     return Math.round(weighted);
   }, [categoryScores]);
 
+  // Save to progress (once)
+  const savedToProgressRef = useRef(false);
+  useEffect(() => {
+    if (!open || savedToProgressRef.current || overallScore === 0) return;
+    savedToProgressRef.current = true;
+
+    const commCat = categoryScores.find((c) => c.label === 'Communication');
+    const duration = timeSpent;
+
+    const { addCompletedInterview, updateStreak, addXp } = useProgressStore.getState();
+    addCompletedInterview({
+      id: `sd-${Date.now()}`,
+      timestamp: Date.now(),
+      mode: 'system-design',
+      topicOrProblem: topic?.title ?? 'System Design',
+      score: overallScore,
+      duration,
+      categoryScores: {
+        systemDesign: overallScore,
+        communication: commCat?.score ?? 0,
+      },
+    });
+    updateStreak();
+    addXp(xpForSession(overallScore, duration));
+  }, [open, overallScore, categoryScores, timeSpent, topic]);
+
   // Strengths & improvements
   const { strengths, improvements } = useMemo(() => {
     const sorted = [...categoryScores].sort((a, b) => b.score - a.score);
@@ -303,7 +339,7 @@ export function SystemDesignReportDialog({
         mermaid.initialize({
           startOnLoad: false,
           theme: 'neutral',
-          securityLevel: 'loose',
+          securityLevel: 'strict',
         });
 
         if (cancelled || !mermaidContainerRef.current) return;
@@ -354,9 +390,16 @@ export function SystemDesignReportDialog({
       '',
       'Areas for Improvement:',
       ...improvements.map((i) => `  - ${i}`),
+      '',
+      getSpeechAnalyticsSummary(transcript),
     ];
-    navigator.clipboard.writeText(lines.join('\n'));
+    try {
+      navigator.clipboard.writeText(lines.join('\n'));
+    } catch {
+      // Clipboard API may fail in non-HTTPS contexts — silently ignore
+    }
   }, [
+    transcript,
     topic,
     overallScore,
     categoryScores,
@@ -390,16 +433,15 @@ export function SystemDesignReportDialog({
     URL.revokeObjectURL(url);
   }, [topic]);
 
-  // Close and navigate
-  const handleClose = useCallback(() => {
-    onOpenChange(false);
-    router.push('/system-design');
-  }, [onOpenChange, router]);
-
   // Circular progress SVG values
   const circleRadius = 54;
   const circleCircumference = 2 * Math.PI * circleRadius;
   const circleOffset = circleCircumference - (overallScore / 100) * circleCircumference;
+
+  const handleTryAnother = useCallback(() => {
+    onOpenChange(false);
+    router.push('/system-design');
+  }, [onOpenChange, router]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -630,6 +672,11 @@ export function SystemDesignReportDialog({
             </CardContent>
           </Card>
 
+          {/* --- Speech Analytics --- */}
+          <div className="lg:col-span-3">
+            <SpeechAnalyticsPanel transcript={transcript} />
+          </div>
+
           {/* --- Mermaid Diagram Preview --- */}
           {mermaidDiagram && (
             <Card className="lg:col-span-3 bg-card">
@@ -650,20 +697,68 @@ export function SystemDesignReportDialog({
         </div>
 
         {/* --- Footer Actions --- */}
-        <div className="flex flex-wrap justify-end gap-2 mt-6 border-t border-border pt-6">
-          <Button variant="outline" size="sm" onClick={handleCopyReport}>
-            <Copy className="w-4 h-4 mr-2" />
-            Copy Summary
-          </Button>
-          {mermaidDiagram && (
-            <Button variant="outline" size="sm" onClick={handleExportSvg}>
-              <Download className="w-4 h-4 mr-2" />
-              Export SVG
-            </Button>
-          )}
-          <Button onClick={handleClose}>Close</Button>
-        </div>
+        <SystemDesignReportActions
+          onCopyReport={handleCopyReport}
+          onExportSvg={mermaidDiagram ? handleExportSvg : undefined}
+          onTryAnother={handleTryAnother}
+          topicTitle={topic?.title}
+          overallScore={overallScore}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SystemDesignReportActions({
+  onCopyReport,
+  onExportSvg,
+  onTryAnother,
+  topicTitle,
+  overallScore,
+}: {
+  onCopyReport: () => void;
+  onExportSvg?: () => void;
+  onTryAnother: () => void;
+  topicTitle?: string;
+  overallScore: number;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = useCallback(() => {
+    const text = `I just completed a system design interview on "${topicTitle ?? 'a system design topic'}" and scored ${overallScore}%! Practice with AI interviewer Alexis.`;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may fail
+    }
+  }, [topicTitle, overallScore]);
+
+  return (
+    <div className="flex flex-wrap justify-between gap-2 mt-6 border-t border-border pt-6">
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={onTryAnother}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Try Another Topic
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleShare}>
+          {copied ? <Check className="w-4 h-4 mr-2 text-green-500" /> : <Copy className="w-4 h-4 mr-2" />}
+          {copied ? 'Copied!' : 'Share Results'}
+        </Button>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={onCopyReport}>
+          <Copy className="w-4 h-4 mr-2" />
+          Copy Summary
+        </Button>
+        {onExportSvg && (
+          <Button variant="outline" size="sm" onClick={onExportSvg}>
+            <Download className="w-4 h-4 mr-2" />
+            Export SVG
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

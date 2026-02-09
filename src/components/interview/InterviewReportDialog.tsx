@@ -8,12 +8,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Shield, AlertTriangle, CheckCircle, XCircle, Code, Brain, Loader2, FileDown } from "lucide-react";
+import { Shield, AlertTriangle, Code, Brain, Loader2, FileDown, RotateCcw, ArrowRight, Copy, Check, Save } from "lucide-react";
 import { useInterviewStore } from "@/lib/store";
+import { SpeechAnalyticsPanel } from "@/components/analytics/SpeechAnalyticsPanel";
+import { SolutionPanel } from "@/components/practice/SolutionPanel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { authFetch } from "@/lib/api-client";
+import { PROBLEMS } from "@/data/problems";
+import { useProgressStore, xpForSession } from "@/lib/progress-store";
 
 interface InterviewReportDialogProps {
   open: boolean;
@@ -42,27 +45,60 @@ function calculateIntegrityScore(integrity: {
 export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDialogProps) {
   const {
     integrity,
-    latestReview,
-    coderabbitReview,
     code,
     transcript,
     testResults,
     currentProblemId
   } = useInterviewStore();
 
+  const currentProblem = PROBLEMS.find((p) => p.id === currentProblemId);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [aiReport, setAiReport] = useState<any>(null); // StructuredReport
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const integrityScore = calculateIntegrityScore(integrity);
   const isIntegrityGood = integrityScore > 70;
+  const savedToProgressRef = useRef(false);
 
   // Generate AI report when dialog opens
   useEffect(() => {
     if (open && !aiReport && !isGenerating) {
       generateReport();
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save to progress when report is ready
+  useEffect(() => {
+    if (!aiReport || savedToProgressRef.current) return;
+    savedToProgressRef.current = true;
+
+    const techScore = aiReport.technicalEvaluation?.score ?? 0;
+    const commScore = aiReport.communicationEvaluation?.score ?? 0;
+    const psScore = aiReport.problemSolvingEvaluation?.score ?? 0;
+    const overallScore = Math.round(((techScore + commScore + psScore) / 3) * 10);
+    const startTime = useInterviewStore.getState().interviewStartTime;
+    const duration = startTime ? Date.now() - startTime : 0;
+    const problem = PROBLEMS.find((p) => p.id === currentProblemId);
+
+    const { addCompletedInterview, updateStreak, addXp } = useProgressStore.getState();
+    addCompletedInterview({
+      id: `coding-${Date.now()}`,
+      timestamp: Date.now(),
+      mode: 'coding',
+      topicOrProblem: problem?.title ?? 'Coding Challenge',
+      score: overallScore,
+      duration,
+      categoryScores: {
+        coding: techScore * 10,
+        communication: commScore * 10,
+        problemSolving: psScore * 10,
+      },
+    });
+    updateStreak();
+    addXp(xpForSession(overallScore, duration));
+  }, [aiReport, currentProblemId]);
 
   const generateReport = async () => {
     setIsGenerating(true);
@@ -75,7 +111,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
         body: JSON.stringify({
           transcript,
           code,
-          language: 'python',
+          language: useInterviewStore.getState().language || 'python',
           testResults,
           integrity,
           problemId: currentProblemId || 'Coding Challenge'
@@ -90,22 +126,7 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
 
       setAiReport(data.data.report);
 
-      // Cleanup workspace after successful report generation
-      const workspaceId = useInterviewStore.getState().workspaceId;
-      if (workspaceId) {
-        try {
-          console.log('🗑️ Cleaning up workspace after report generation...');
-          await fetch('/api/sandbox/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workspaceId })
-          });
-          console.log('✅ Workspace cleanup complete');
-        } catch (deleteErr) {
-          // Don't fail the report if cleanup fails - just log it
-          console.warn('Failed to cleanup workspace (non-fatal):', deleteErr);
-        }
-      }
+      // Workspace cleanup is handled in handleEndInterview — no duplicate deletion here
     } catch (err) {
       console.error('Failed to generate AI report:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate report');
@@ -270,13 +291,13 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-3 rounded-lg bg-black/40">
+                  <div className="text-center p-3 rounded-lg bg-muted/50">
                     <div className={`text-2xl font-bold ${isIntegrityGood ? "text-green-400" : "text-red-400"}`}>
                       {integrityScore}%
                     </div>
                     <div className="text-xs text-muted-foreground uppercase mt-1">Trust Score</div>
                   </div>
-                  <div className="text-center p-3 rounded-lg bg-black/40">
+                  <div className="text-center p-3 rounded-lg bg-muted/50">
                     <div className="text-2xl font-bold text-blue-400">
                       {testResults.length > 0
                         ? `${testResults[testResults.length - 1].testsPassed}/${testResults[testResults.length - 1].testsTotal}`
@@ -313,6 +334,11 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
               </CardContent>
             </Card>
 
+            {/* Speech Analytics */}
+            <div className="lg:col-span-2">
+              <SpeechAnalyticsPanel transcript={transcript} />
+            </div>
+
             {/* Final Verdict & Feedback */}
             <Card className="lg:col-span-2 border-t-4 border-t-pink-500 bg-gradient-to-b from-pink-950/20 to-card">
               <CardHeader>
@@ -321,21 +347,112 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-foreground/80 italic">
-                "{aiReport.finalFeedback}"
+                &ldquo;{aiReport.finalFeedback}&rdquo;
               </CardContent>
             </Card>
 
           </div>
         ) : null}
 
-        <div className="flex justify-end gap-2 mt-6 border-t border-border pt-6 no-print">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button onClick={() => window.print()}>
-            <FileDown className="w-4 h-4 mr-2" />
-            Download PDF
-          </Button>
-        </div>
+        {/* Solution Editorial */}
+        {currentProblem && (
+          <div className="mt-4">
+            <SolutionPanel
+              solution={currentProblem.solution}
+              solutionCode={currentProblem.solutionCode}
+              timeComplexity={currentProblem.timeComplexity}
+              spaceComplexity={currentProblem.spaceComplexity}
+            />
+          </div>
+        )}
+
+        <InterviewReportActions
+          onOpenChange={onOpenChange}
+          currentProblemId={currentProblemId}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function InterviewReportActions({
+  onOpenChange,
+  currentProblemId,
+}: {
+  onOpenChange: (open: boolean) => void;
+  currentProblemId: string | null;
+}) {
+  const [copied, setCopied] = useState(false);
+  const { setCode, setCurrentProblemId, clearTranscript, clearTestResults, clearLogs, setStatus } = useInterviewStore();
+
+  const handleTryAgain = useCallback(() => {
+    const problem = PROBLEMS.find((p) => p.id === currentProblemId);
+    if (problem) {
+      setCode(problem.starterCode);
+      clearTranscript();
+      clearTestResults();
+      clearLogs();
+      setStatus('idle');
+    }
+    onOpenChange(false);
+    window.location.href = '/interview';
+  }, [currentProblemId, setCode, clearTranscript, clearTestResults, clearLogs, setStatus, onOpenChange]);
+
+  const handleNextProblem = useCallback(() => {
+    const currentIndex = PROBLEMS.findIndex((p) => p.id === currentProblemId);
+    const nextIndex = (currentIndex + 1) % PROBLEMS.length;
+    const nextProblem = PROBLEMS[nextIndex];
+    setCurrentProblemId(nextProblem.id);
+    setCode(nextProblem.starterCode);
+    clearTranscript();
+    clearTestResults();
+    clearLogs();
+    setStatus('idle');
+    onOpenChange(false);
+    window.location.href = '/interview';
+  }, [currentProblemId, setCurrentProblemId, setCode, clearTranscript, clearTestResults, clearLogs, setStatus, onOpenChange]);
+
+  const handleShare = useCallback(() => {
+    const problem = PROBLEMS.find((p) => p.id === currentProblemId);
+    const text = `I just completed "${problem?.title ?? 'a coding challenge'}" on BetterThanLeet with AI interviewer Alexis! Try it yourself.`;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard may fail
+    }
+  }, [currentProblemId]);
+
+  return (
+    <div className="flex flex-wrap justify-between gap-2 mt-6 border-t border-border pt-6 no-print">
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={handleTryAgain}>
+          <RotateCcw className="w-4 h-4 mr-2" />
+          Try Again
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleNextProblem}>
+          <ArrowRight className="w-4 h-4 mr-2" />
+          Next Problem
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleShare}>
+          {copied ? <Check className="w-4 h-4 mr-2 text-green-500" /> : <Copy className="w-4 h-4 mr-2" />}
+          {copied ? 'Copied!' : 'Share Results'}
+        </Button>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={() => { onOpenChange(false); window.location.href = '/dashboard'; }}>
+          <Save className="w-4 h-4 mr-2" />
+          View Dashboard
+        </Button>
+        <Button variant="outline" onClick={() => { onOpenChange(false); window.location.href = '/'; }}>
+          Return Home
+        </Button>
+        <Button onClick={() => window.print()}>
+          <FileDown className="w-4 h-4 mr-2" />
+          Download PDF
+        </Button>
+      </div>
+    </div>
   );
 }

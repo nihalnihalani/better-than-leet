@@ -27,7 +27,7 @@ export class CodeRabbitService {
       if (useMock) {
           console.log(`[CodeRabbit] Analyzing sandbox ${workspaceId} (MOCK)...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
-          return this.getMockReview("def mock_code(): pass");
+          return this.getMockReview();
       }
 
       console.log(`[CodeRabbit] Analyzing sandbox ${workspaceId} (REAL)...`);
@@ -70,19 +70,17 @@ export class CodeRabbitService {
         console.log(`[CodeRabbit] Analyzing ${language} code (MOCK)...`);
         // Simulate network delay
         await new Promise(resolve => setTimeout(resolve, 2000));
-        return this.getMockReview(code);
+        return this.getMockReview();
     }
 
     // Real implementation placeholder
     console.log(`[CodeRabbit] Analyzing ${language} code (REAL)...`);
     // In a real scenario, this would SSH into the Daytona sandbox and run the CLI.
     // For now, fallback to mock until CLI is configured
-    return this.getMockReview(code);
+    return this.getMockReview();
   }
 
-  private getMockReview(code: string): CodeRabbitReview {
-    const isPython = code.includes('def ') || code.includes('import ');
-    
+  private getMockReview(): CodeRabbitReview {
     return {
       summary: "I've reviewed your code changes. The logic seems sound, but there are a few opportunities for optimization and better error handling.",
       walkthrough: [

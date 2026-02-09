@@ -97,7 +97,8 @@ export class ReportGenerator {
     };
   }
 
-  private analyzeCodeQuality(code: string, language: string): CodeQualityScore {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  private analyzeCodeQuality(code: string, _language: string): CodeQualityScore {
     const scores = { correctness: 9, efficiency: 0, codeStyle: 0, edgeCases: 0 };
     const breakdown: string[] = [];
 

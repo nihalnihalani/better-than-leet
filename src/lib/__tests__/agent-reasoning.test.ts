@@ -185,7 +185,6 @@ for i in range(n):
             const actions = await agent.analyzeAndAct(code, 'python');
 
             // Should not give another hint after max
-            const hintActions = actions.filter(a => a.type === 'hint');
             // Either no hint or the logic handles it differently
             expect(actions.length).toBeGreaterThan(0);
         });

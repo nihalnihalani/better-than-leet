@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, CheckCircle, BrainCircuit, Shield, ShieldAlert } from 'lucide-react';
+import { AlertCircle, CheckCircle, BrainCircuit, ShieldAlert } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 interface AnalysisResult {
@@ -92,7 +91,7 @@ export function AnalysisPanel({ result, isLoading }: { result: AnalysisResult | 
           <BrainCircuit className="w-4 h-4" /> AI Reasoning
         </h4>
         <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg border border-border italic">
-          "{result.reasoning_trace}"
+          &ldquo;{result.reasoning_trace}&rdquo;
         </div>
       </div>
     </div>

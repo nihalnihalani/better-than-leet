@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useInterviewStore } from '@/lib/store';
 import { useSystemDesignStore } from '@/lib/system-design-store';
+import { useBehavioralStore } from '@/lib/behavioral-store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquare, Mic, Type } from 'lucide-react';
 
@@ -40,13 +41,14 @@ function groupTranscript(transcript: { speaker: 'agent' | 'user'; message: strin
 }
 
 interface TranscriptPanelProps {
-  mode?: 'coding' | 'system-design';
+  mode?: 'coding' | 'system-design' | 'behavioral';
 }
 
 export function TranscriptPanel({ mode = 'coding' }: TranscriptPanelProps) {
   const codingTranscript = useInterviewStore((s) => s.transcript);
   const sdTranscript = useSystemDesignStore((s) => s.transcript);
-  const transcript = mode === 'system-design' ? sdTranscript : codingTranscript;
+  const behavioralTranscript = useBehavioralStore((s) => s.transcript);
+  const transcript = mode === 'system-design' ? sdTranscript : mode === 'behavioral' ? behavioralTranscript : codingTranscript;
   const endRef = useRef<HTMLDivElement>(null);
   const [, setTick] = useState(0);
 
@@ -109,7 +111,7 @@ export function TranscriptPanel({ mode = 'coding' }: TranscriptPanelProps) {
             ))
           )}
           {isAgentSpeaking && (
-            <div className="text-xs text-purple-300/60 px-3 py-1 flex items-center gap-1.5">
+            <div className="text-xs text-purple-500/60 dark:text-purple-300/60 px-3 py-1 flex items-center gap-1.5">
               <span className="flex gap-0.5">
                 <span className="w-1 h-1 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                 <span className="w-1 h-1 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '150ms' }} />

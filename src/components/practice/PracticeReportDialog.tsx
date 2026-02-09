@@ -25,8 +25,10 @@ import {
   Star,
 } from "lucide-react";
 import { useInterviewStore } from "@/lib/store";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { COMPANIES } from "@/data/company-problems";
+import { authFetch } from "@/lib/api-client";
+import { SolutionPanel } from "@/components/practice/SolutionPanel";
 import {
   CoachingFeedback,
   DEFAULT_COACHING_FEEDBACK,
@@ -37,6 +39,7 @@ import {
 } from "@/lib/coaching";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useProgressStore, xpForSession } from "@/lib/progress-store";
 
 interface PracticeReportDialogProps {
   open: boolean;
@@ -120,19 +123,57 @@ export function PracticeReportDialog({ open, onOpenChange }: PracticeReportDialo
 
   const company = selectedCompanyId ? COMPANIES.find(c => c.id === selectedCompanyId) : null;
 
+  const currentProblem = useMemo(() => {
+    if (!currentProblemId) return null;
+    for (const c of COMPANIES) {
+      const found = c.problems.find(p => p.id === currentProblemId);
+      if (found) return found;
+    }
+    return null;
+  }, [currentProblemId]);
+
+  const savedToProgressRef = useRef(false);
+
   // Generate coaching feedback when dialog opens
   useEffect(() => {
     if (open && !feedback && !isGenerating) {
       generateFeedback();
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Save to progress when feedback is ready
+  useEffect(() => {
+    if (!feedback || savedToProgressRef.current) return;
+    savedToProgressRef.current = true;
+
+    const overallScore = feedback.overallScore * 10; // 0-10 to 0-100
+    const startTime = useInterviewStore.getState().interviewStartTime;
+    const duration = startTime ? Date.now() - startTime : 0;
+
+    const { addCompletedInterview, updateStreak, addXp } = useProgressStore.getState();
+    addCompletedInterview({
+      id: `practice-${Date.now()}`,
+      timestamp: Date.now(),
+      mode: 'practice',
+      topicOrProblem: currentProblem?.title ?? 'Practice',
+      score: overallScore,
+      duration,
+      categoryScores: {
+        coding: feedback.categories.codeQuality.score * 10,
+        communication: feedback.categories.communication.score * 10,
+        problemSolving: feedback.categories.problemSolving.score * 10,
+      },
+    });
+    updateStreak();
+    addXp(xpForSession(overallScore, duration));
+  }, [feedback, currentProblem]);
 
   const generateFeedback = async () => {
     setIsGenerating(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/practice/feedback', {
+      const response = await authFetch('/api/practice/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -232,7 +273,7 @@ export function PracticeReportDialog({ open, onOpenChange }: PracticeReportDialo
                   <div>
                     <h3 className="text-lg font-semibold mb-1">Overall Performance</h3>
                     <p className="text-muted-foreground text-sm">
-                      You're on the path to becoming a stronger coder!
+                      You&apos;re on the path to becoming a stronger coder!
                     </p>
                   </div>
                   <div className="text-right">
@@ -422,6 +463,17 @@ export function PracticeReportDialog({ open, onOpenChange }: PracticeReportDialo
             </div>
           </div>
         ) : null}
+
+        {currentProblem && (
+          <div className="mt-4">
+            <SolutionPanel
+              solution={currentProblem.solution}
+              solutionCode={currentProblem.solutionCode}
+              timeComplexity={currentProblem.timeComplexity}
+              spaceComplexity={currentProblem.spaceComplexity}
+            />
+          </div>
+        )}
 
         <div className="flex justify-between gap-2 mt-6 pt-4 border-t">
           <Link href="/practice">

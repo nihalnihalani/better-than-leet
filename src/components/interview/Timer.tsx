@@ -3,16 +3,18 @@
 import { useEffect, useState } from 'react';
 import { useInterviewStore } from '@/lib/store';
 import { useSystemDesignStore } from '@/lib/system-design-store';
+import { useBehavioralStore } from '@/lib/behavioral-store';
 import { Clock } from 'lucide-react';
 
 interface TimerProps {
-  mode?: 'coding' | 'system-design';
+  mode?: 'coding' | 'system-design' | 'behavioral';
 }
 
 export function Timer({ mode = 'coding' }: TimerProps) {
   const codingStartTime = useInterviewStore((s) => s.interviewStartTime);
   const sdStartTime = useSystemDesignStore((s) => s.interviewStartTime);
-  const interviewStartTime = mode === 'system-design' ? sdStartTime : codingStartTime;
+  const behavioralStartTime = useBehavioralStore((s) => s.interviewStartTime);
+  const interviewStartTime = mode === 'system-design' ? sdStartTime : mode === 'behavioral' ? behavioralStartTime : codingStartTime;
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {

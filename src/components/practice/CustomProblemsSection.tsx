@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { useInterviewStore, CustomProblem } from '@/lib/store';
+import { useInterviewStore } from '@/lib/store';
 import { AddCustomProblemDialog } from './AddCustomProblemDialog';
 import { cn } from '@/lib/utils';
 

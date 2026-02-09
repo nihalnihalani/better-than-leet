@@ -4,10 +4,11 @@ import { CodeEditor } from './CodeEditor';
 
 // Mock next/dynamic
 vi.mock('next/dynamic', () => ({
-  default: (importFunc: () => Promise<any>) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  default: (_importFunc: () => Promise<unknown>) => {
     // We can just return a simple component here that mocks the editor
     // ignoring the importFunc since we don't want to deal with async imports in tests
-    const MockEditor = ({ onChange, defaultValue }: any) => (
+    const MockEditor = ({ onChange, defaultValue }: { onChange: (v: string) => void; defaultValue: string }) => (
       <textarea
         data-testid="monaco-editor-mock"
         defaultValue={defaultValue}

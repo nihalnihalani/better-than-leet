@@ -10,6 +10,7 @@ import { CompanySelector } from '@/components/practice/CompanySelector';
 import { ProblemSelector } from '@/components/practice/ProblemSelector';
 import { NeetCodeProblemSelector } from '@/components/practice/NeetCodeProblemSelector';
 import { CustomProblemsSection } from '@/components/practice/CustomProblemsSection';
+import { CompanyGuidesSection } from '@/components/practice/CompanyGuidesSection';
 import { useInterviewStore } from '@/lib/store';
 import { COMPANIES, NEETCODE_CATEGORIES } from '@/data/company-problems';
 import { ArrowLeft, GraduationCap } from 'lucide-react';
@@ -136,6 +137,9 @@ export default function PracticePage() {
               <span className="hidden sm:inline">{step === 'problem' ? getStepLabel() : 'Select Problem'}</span>
             </div>
           </div>
+
+          {/* Company Interview Guides */}
+          {step === 'company' && <CompanyGuidesSection />}
 
           {/* Content */}
           {step === 'company' && (

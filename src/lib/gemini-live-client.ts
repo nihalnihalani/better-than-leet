@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Gemini Live Client v5
  * Hybrid approach: raw WebSocket (for reliable API key passing) + SDK message format
@@ -15,8 +16,11 @@
 import { INTERVIEW_TOOLS } from "./gemini-tools";
 import { SYSTEM_DESIGN_TOOLS, SYSTEM_DESIGN_TOOLS_FALLBACK } from "./system-design-tools";
 import { getSystemInstruction } from "./interviewer-prompt";
-import { getSystemDesignInstruction } from "./system-design-prompt";
+import { getSystemDesignInstruction, SYSTEM_DESIGN_INSTRUCTION } from "./system-design-prompt";
 import { getSystemDesignTopic, type SystemDesignTopic } from "@/data/system-design-topics";
+import { getBehavioralTopic, type BehavioralTopic } from "@/data/behavioral-topics";
+import { getBehavioralInstruction, BEHAVIORAL_INTERVIEW_INSTRUCTION } from "./behavioral-prompt";
+import { BEHAVIORAL_TOOLS } from "./behavioral-tools";
 
 // Audio sample rates per Gemini Live API spec
 const INPUT_SAMPLE_RATE = 16000;  // Input MUST be 16kHz
@@ -38,7 +42,7 @@ const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
 const POST_INTERRUPT_TIMEOUT_MS = 7000;
 
 // Interview mode type
-export type InterviewMode = 'real' | 'practice' | 'system-design';
+export type InterviewMode = 'real' | 'practice' | 'system-design' | 'behavioral';
 
 // Problem context to send to Gemini directly at startup
 export interface ProblemContext {
@@ -67,6 +71,8 @@ export class GeminiLiveClient {
   private interviewMode: InterviewMode = 'real';
   private problemContext: ProblemContext | null = null;
   private systemDesignTopic: SystemDesignTopic | null = null;
+  private behavioralTopic: BehavioralTopic | null = null;
+  private personaPrompt: string | null = null;
   private useFallbackTools = false;
   private isInterviewEnding = false;
 
@@ -108,6 +114,7 @@ export class GeminiLiveClient {
   public onNoResponse: () => void = () => {};
   public onSetupComplete: () => void = () => {};
   public onUserTranscript: (text: string) => void = () => {};
+  public onDisconnect: () => void = () => {};
 
   constructor(private apiKey: string, mode: InterviewMode = 'real') {
     this.apiKey = apiKey.trim();
@@ -133,6 +140,17 @@ export class GeminiLiveClient {
     if (this.systemDesignTopic) {
       console.log(`📐 System design topic set: ${this.systemDesignTopic.title}`);
     }
+  }
+
+  setBehavioralTopic(topicId: string) {
+    this.behavioralTopic = getBehavioralTopic(topicId) || null;
+    if (this.behavioralTopic) {
+      console.log(`🎯 Behavioral topic set: ${this.behavioralTopic.title}`);
+    }
+  }
+
+  setPersona(promptAddition: string | null) {
+    this.personaPrompt = promptAddition;
   }
 
   /** Mark that the interview is ending (called before disconnect to prevent 1008 retry) */
@@ -165,14 +183,24 @@ export class GeminiLiveClient {
         // permissions.query may not be supported, continue anyway
       }
 
-      // Build system instruction based on interview mode
+      // Build system instruction based on interview mode (with optional persona)
+      const persona = this.personaPrompt ?? undefined;
       let systemInstruction: string;
-      if (this.interviewMode === 'system-design' && this.systemDesignTopic) {
-        systemInstruction = getSystemDesignInstruction(this.systemDesignTopic);
+      if (this.interviewMode === 'behavioral' && this.behavioralTopic) {
+        systemInstruction = getBehavioralInstruction(this.behavioralTopic, persona);
+      } else if (this.interviewMode === 'behavioral') {
+        // Fallback: behavioral mode but no topic set
+        console.warn("⚠️ Behavioral mode without topic — using base behavioral prompt");
+        systemInstruction = BEHAVIORAL_INTERVIEW_INSTRUCTION + (persona ?? '');
+      } else if (this.interviewMode === 'system-design' && this.systemDesignTopic) {
+        systemInstruction = getSystemDesignInstruction(this.systemDesignTopic, persona);
+      } else if (this.interviewMode === 'system-design') {
+        // Fallback: system-design mode but no topic set (hydration race safety net)
+        console.warn("⚠️ System design mode without topic — using base system design prompt");
+        systemInstruction = SYSTEM_DESIGN_INSTRUCTION + (persona ?? '');
       } else {
         // For non-system-design modes, use the standard interviewer prompt
-        const mode = this.interviewMode === 'system-design' ? 'real' : this.interviewMode;
-        systemInstruction = getSystemInstruction(mode);
+        systemInstruction = getSystemInstruction(this.interviewMode, persona);
         if (this.problemContext) {
           systemInstruction += this.buildProblemSection();
         }
@@ -248,7 +276,7 @@ export class GeminiLiveClient {
           role: "user",
           parts: [{ text: systemInstruction }]
         },
-        tools: (this.interviewMode === 'system-design' && !this.useFallbackTools) ? SYSTEM_DESIGN_TOOLS : (this.useFallbackTools ? SYSTEM_DESIGN_TOOLS_FALLBACK : INTERVIEW_TOOLS),
+        tools: this.interviewMode === 'behavioral' ? BEHAVIORAL_TOOLS : (this.interviewMode === 'system-design' && !this.useFallbackTools) ? SYSTEM_DESIGN_TOOLS : (this.useFallbackTools ? SYSTEM_DESIGN_TOOLS_FALLBACK : INTERVIEW_TOOLS),
         realtimeInputConfig: {
           // Ensure user speech during interruption is included in context
           // so the model responds to what the user said, not resuming its
@@ -277,8 +305,27 @@ export class GeminiLiveClient {
       }
     };
 
-    console.log("📤 Sending setup message...");
-    this.ws.send(JSON.stringify(setupMessage));
+    const payload = JSON.stringify(setupMessage);
+
+    // Guard against onopen firing before readyState transitions to OPEN
+    // (observed in Turbopack / certain browser runtimes)
+    if (this.ws.readyState === WebSocket.OPEN) {
+      console.log("📤 Sending setup message...");
+      this.ws.send(payload);
+    } else {
+      console.log("⏳ WebSocket not yet OPEN, deferring setup message...");
+      const ws = this.ws;
+      const sendWhenReady = () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          console.log("📤 Sending deferred setup message...");
+          ws.send(payload);
+        } else if (ws.readyState === WebSocket.CONNECTING) {
+          setTimeout(sendWhenReady, 50);
+        }
+        // If CLOSING or CLOSED, silently abandon — handleClose will deal with it
+      };
+      setTimeout(sendWhenReady, 50);
+    }
   }
 
   disconnect() {
@@ -311,12 +358,18 @@ export class GeminiLiveClient {
       return;
     }
 
-    this.ws.send(JSON.stringify({
+    const payload = JSON.stringify({
       clientContent: {
         turns: [{ role: "user", parts: [{ text }] }],
         turnComplete: true,
       }
-    }));
+    });
+
+    if (this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(payload);
+    } else {
+      console.warn("WebSocket not OPEN for sendText, readyState:", this.ws.readyState);
+    }
   }
 
   sendCodeContext(code: string, silent: boolean = true) {
@@ -670,6 +723,11 @@ export class GeminiLiveClient {
       this.onStatusChange('disconnected');
     }
     this.stopAudio();
+
+    // Notify agent of involuntary disconnect (retries exhausted or retriable code)
+    if (shouldRetry || (event.code !== 1000 && event.code !== 1008)) {
+      this.onDisconnect();
+    }
   }
 
   private buildProblemSection(): string {

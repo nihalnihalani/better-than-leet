@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Gemini Live Client v5
  * Hybrid approach: raw WebSocket (for reliable API key passing) + SDK message format
@@ -35,7 +36,7 @@ const MAX_AUDIO_QUEUE_SIZE = 100; // Prevent memory leaks
 const POST_INTERRUPT_TIMEOUT_MS = 7000;
 
 // Interview mode type
-export type InterviewMode = 'real' | 'practice';
+export type InterviewMode = 'real' | 'practice' | 'system-design' | 'behavioral';
 
 // Problem context to send to Gemini directly at startup
 export interface ProblemContext {
@@ -63,6 +64,7 @@ export class InterviewLiveClient {
   private mediaStream: MediaStream | null = null;
   private interviewMode: InterviewMode = 'real';
   private problemContext: ProblemContext | null = null;
+  private personaPrompt: string | null = null;
 
   // Audio Playback Queue
   private audioQueue: Float32Array[] = [];
@@ -119,6 +121,10 @@ export class InterviewLiveClient {
     console.log(`📋 Problem context set: ${problem.title}`);
   }
 
+  setPersona(promptAddition: string | null) {
+    this.personaPrompt = promptAddition;
+  }
+
   async connect(isRetry = false) {
     if (!isRetry) {
       this.retryAttempts = 0;
@@ -143,8 +149,9 @@ export class InterviewLiveClient {
         // permissions.query may not be supported, continue anyway
       }
 
-      // Build system instruction with problem context
-      let systemInstruction = getSystemInstruction(this.interviewMode);
+      // Build system instruction with problem context and persona
+      const promptMode = (this.interviewMode === 'real' || this.interviewMode === 'practice') ? this.interviewMode : 'real';
+      let systemInstruction = getSystemInstruction(promptMode, this.personaPrompt ?? undefined);
       if (this.problemContext) {
         systemInstruction += this.buildProblemSection();
       }

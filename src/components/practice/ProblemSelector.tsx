@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { COMPANIES, CompanyProblem } from '@/data/company-problems';
+import { COMPANIES } from '@/data/company-problems';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

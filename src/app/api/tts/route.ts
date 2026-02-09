@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { errorResponse, handleApiError } from '@/lib/api-utils';
 import { DEFAULT_GEMINI_VOICE } from '@/lib/constants';
 import { TTSRequestSchema, validateRequest } from '@/lib/schemas';
