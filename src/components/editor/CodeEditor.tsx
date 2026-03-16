@@ -103,19 +103,19 @@ export function CodeEditor({
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-md overflow-hidden bg-card">
-      <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
-        <span className="text-sm text-muted-foreground font-mono">{language}</span>
+    <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
+      <div className="flex items-center justify-between h-9 px-3 border-b border-white/10 shrink-0">
+        <span className="text-xs text-gray-500 font-mono">{language}</span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter to run
+          <span className="text-[11px] text-gray-600 hidden sm:inline">
+            {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter
           </span>
           <Button
             size="sm"
-            variant="secondary"
+            variant="ghost"
             onClick={handleRun}
             disabled={isRunning}
-            className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white border-0"
+            className="h-6 text-xs gap-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors duration-150"
           >
             <Play className="w-3 h-3" fill="currentColor" />
             {isRunning ? "Running..." : "Run"}

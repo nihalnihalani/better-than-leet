@@ -41,7 +41,7 @@ export default function Home() {
           </div>
 
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight flex flex-col items-center gap-2 pb-2">
-            <span className="animate-slide-up-fade" style={{ animationDelay: '200ms' }}>Meet <span className="animate-color-wave font-extrabold tracking-tight">BetterThanLeet</span></span>
+            <span className="animate-slide-up-fade" style={{ animationDelay: '200ms' }}>Meet <span className="dark:text-gradient font-extrabold tracking-tight">BetterThanLeet</span></span>
             <span className="animate-slide-up-fade delay-200 text-4xl md:text-6xl text-muted-foreground dark:text-foreground/70 font-normal" style={{ animationDelay: '400ms' }}>
               Your AI Technical Interviewer, Alexis
             </span>

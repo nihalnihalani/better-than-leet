@@ -5,9 +5,9 @@ import { CodeRabbitReview } from '@/lib/coderabbit';
 export function CodeRabbitReviewPanel({ result, isLoading }: { result: CodeRabbitReview | null, isLoading: boolean }) {
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 text-orange-400 animate-pulse">
-        <Rabbit className="w-8 h-8 mb-2 animate-bounce" />
-        <p>CodeRabbit is hopping through your code...</p>
+      <div className="flex flex-col items-center justify-center p-8 text-gray-400">
+        <Rabbit className="w-6 h-6 mb-2 opacity-50" />
+        <p className="text-sm">Analyzing code...</p>
       </div>
     );
   }
