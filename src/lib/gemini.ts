@@ -5,8 +5,9 @@ import { CoachingFeedback, DEFAULT_COACHING_FEEDBACK, calculateSkillLevel } from
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// Using Gemini 2.0 Flash for fast, capable reasoning
-const MODEL_NAME = "gemini-2.0-flash";
+// Using Gemini 3.1 Pro Preview for best reasoning, coding, and agentic capabilities
+// Note: gemini-2.0-flash is retiring June 1, 2026
+const MODEL_NAME = "gemini-3.1-pro-preview";
 
 // ============================================================================
 // Input Sanitization for Prompt Injection Prevention
