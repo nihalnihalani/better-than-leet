@@ -22,10 +22,10 @@ const LogIcon = ({ type }: { type: LogType }) => {
 
 const LogColor = (type: LogType) => {
     switch (type) {
-        case 'stderr': return 'text-red-400';
-        case 'system': return 'text-gray-400';
-        case 'agent': return 'text-purple-300';
-        default: return 'text-gray-300';
+        case 'stderr': return 'text-red-500 dark:text-red-400';
+        case 'system': return 'text-muted-foreground';
+        case 'agent': return 'text-purple-600 dark:text-purple-300';
+        default: return 'text-foreground/80';
     }
 };
 
@@ -37,20 +37,16 @@ export function ConsolePanel({ output }: ConsolePanelProps) {
   }, [output]);
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a0a] border-t border-white/10 font-mono text-xs">
-      <div className="flex items-center gap-2 h-8 px-3 border-b border-white/10 select-none shrink-0">
-        <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-500/80" />
-          <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" />
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
-        </div>
-        <span className="text-[11px] uppercase tracking-wider text-gray-500 font-medium ml-2">Console</span>
+    <div className="flex flex-col h-full bg-muted/30 dark:bg-card border-t border-border font-mono text-xs">
+      <div className="flex items-center gap-2 h-8 px-3 border-b border-border select-none shrink-0 bg-muted/50 dark:bg-muted/20">
+        <Terminal className="w-3 h-3 text-muted-foreground" />
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Console</span>
       </div>
       <pre className="flex-1 p-3 overflow-auto font-mono">
         {output.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-600">
-            <Terminal className="w-8 h-8 mb-2 opacity-30" />
-            <span className="text-[11px] text-gray-500">Awaiting output...</span>
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground/50">
+            <Terminal className="w-8 h-8 mb-2 opacity-20" />
+            <span className="text-[11px]">Awaiting output...</span>
           </div>
         ) : (
           <div role="log" aria-live="polite" aria-label="Console output log" className="flex flex-col gap-0.5">

@@ -1,12 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import type { editor } from 'monaco-editor';
 import type { Monaco } from '@monaco-editor/react';
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 import { useInterviewStore } from '@/lib/store';
+
+function useTheme() {
+  const [dark, setDark] = useState(true);
+  useEffect(() => {
+    const el = document.documentElement;
+    setDark(el.classList.contains('dark'));
+    const obs = new MutationObserver(() => setDark(el.classList.contains('dark')));
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return dark;
+}
 
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -32,6 +44,8 @@ export function CodeEditor({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const onRunRef = useRef(onRun);
   const { addBlurEvent, addPasteEvent, interviewMode } = useInterviewStore();
+  const isDark = useTheme();
+  const monacoTheme = isDark ? 'vs-dark' : 'light';
 
   // Keep onRun ref current to avoid stale closure in Monaco action
   useEffect(() => {
@@ -103,11 +117,11 @@ export function CodeEditor({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#0a0a0a]">
-      <div className="flex items-center justify-between h-9 px-3 border-b border-white/10 shrink-0">
-        <span className="text-xs text-gray-500 font-mono">{language}</span>
+    <div className="flex flex-col h-full overflow-hidden bg-card">
+      <div className="flex items-center justify-between h-9 px-3 border-b border-border shrink-0 bg-muted/50">
+        <span className="text-xs text-muted-foreground font-mono">{language}</span>
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-gray-600 hidden sm:inline">
+          <span className="text-[11px] text-muted-foreground/50 hidden sm:inline">
             {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter
           </span>
           <Button
@@ -127,7 +141,7 @@ export function CodeEditor({
           height="100%"
           language={language}
           value={initialCode}
-          theme="vs-dark"
+          theme={monacoTheme}
           onChange={handleEditorChange}
           onMount={handleEditorMount}
           options={{
