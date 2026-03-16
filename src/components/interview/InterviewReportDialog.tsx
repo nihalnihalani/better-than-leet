@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { authFetch } from "@/lib/api-client";
+import { generateInterviewReportPDF } from "@/lib/pdf-generator";
 
 interface InterviewReportDialogProps {
   open: boolean;
@@ -330,7 +331,11 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
 
         <div className="flex justify-end gap-2 mt-6 border-t border-border pt-6 no-print">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button onClick={() => window.print()}>
+          <Button onClick={() => {
+            if (aiReport) {
+              generateInterviewReportPDF(aiReport, integrity, integrityScore, testResults);
+            }
+          }}>
             <FileDown className="w-4 h-4 mr-2" />
             Download PDF
           </Button>
