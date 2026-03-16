@@ -2,9 +2,7 @@
 
 import { useSystemDesignStore } from '@/lib/system-design-store';
 import { Button } from "@/components/ui/button";
-import { StatusIndicator } from './StatusIndicator';
-import { Visualizer } from './Visualizer';
-import { ThinkingIndicator } from './ThinkingIndicator';
+import { VoiceOrb } from './VoiceOrb';
 import { Mic, MicOff, Layers, TestTube } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { getSystemDesignTools } from '@/lib/system-design-agent-tools';
@@ -376,86 +374,72 @@ Continue the interview naturally from this point.`;
     }, [status, clientReady, handleStart]);
 
     return (
-        <div id="agent-container" className="flex flex-col gap-4">
+        <div id="agent-container" className="flex flex-col items-center gap-2">
             {/* Demo Button */}
-            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <div className="w-full p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <TestTube className="w-4 h-4 text-blue-400" />
-                        <span className="text-sm text-blue-400">Demo Mode</span>
+                    <div className="flex items-center gap-1.5">
+                        <TestTube className="w-3.5 h-3.5 text-blue-400" />
+                        <span className="text-xs text-blue-400">Demo</span>
                     </div>
-                    <Button
-                        onClick={handleLoadDemo}
-                        size="sm"
-                        variant="outline"
-                        className="border-blue-500/30 hover:bg-blue-500/20"
-                    >
-                        Load Sample Diagram
+                    <Button onClick={handleLoadDemo} size="sm" variant="ghost" className="h-6 text-xs text-blue-400 hover:bg-blue-500/20">
+                        Load Sample
                     </Button>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
-                    Click to preview what a complete system design diagram looks like
-                </p>
             </div>
 
-            {/* Thinking Indicator */}
-            {(isThinking || isModelSpeaking) && (
-                <ThinkingIndicator isThinking={isThinking || isModelSpeaking} currentAction={currentAction} />
-            )}
+            {/* Voice Orb */}
+            <VoiceOrb
+                status={status}
+                isSpeaking={isSpeaking}
+                isModelSpeaking={isModelSpeaking}
+                volume={volume}
+                isThinking={isThinking}
+                currentAction={currentAction}
+            />
 
-            {/* Microphone muted indicator */}
+            {/* Mic muted indicator */}
             {isMicMuted && status === 'connected' && (
-                <div className="text-xs text-red-400 bg-red-900/20 p-2 rounded border border-red-500/30 flex items-center gap-2">
+                <div className="text-xs text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/20 flex items-center gap-1.5">
                     <MicOff className="w-3 h-3" />
-                    Microphone muted
+                    Muted
                 </div>
             )}
 
             {/* Interruption feedback */}
             {wasInterrupted && !isMicMuted && (
-                <div className="text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded border border-yellow-500/30 flex items-center gap-2 animate-pulse">
+                <div className="text-xs text-yellow-500 bg-yellow-500/10 px-3 py-1.5 rounded-full border border-yellow-500/20 flex items-center gap-1.5 animate-pulse">
                     <MicOff className="w-3 h-3" />
                     Listening to you...
                 </div>
             )}
 
-            <div className="flex items-center gap-4 p-4 border rounded-xl bg-card">
-                <div className="flex flex-col items-center gap-2">
-                    <StatusIndicator status={status} isModelSpeaking={isModelSpeaking} />
-                    {status === 'connected' && !isModelSpeaking && isSpeaking && (
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-400">
-                            <Mic className="w-2.5 h-2.5 animate-pulse" />
-                            <span>Mic active</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex-1 w-full min-w-0">
-                    <Visualizer isSpeaking={isSpeaking || isModelSpeaking} volume={volume} />
-                </div>
-
+            {/* Controls */}
+            <div className="flex gap-2 pt-1">
                 {status === 'connected' ? (
-                    <div className="flex gap-2">
-                        <Button 
-                            variant={isMicMuted ? "default" : "outline"} 
-                            size="icon" 
+                    <>
+                        <Button
+                            variant={isMicMuted ? "default" : "outline"}
+                            size="sm"
                             onClick={handleToggleMute}
-                            title={isMicMuted ? "Unmute microphone" : "Mute microphone"}
+                            className="rounded-full px-3"
+                            title={isMicMuted ? "Unmute" : "Mute"}
                         >
-                            {isMicMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                            {isMicMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={handleStop} title="Disconnect">
-                            <MicOff className="w-4 h-4" />
+                        <Button variant="destructive" size="sm" onClick={handleStop} className="rounded-full px-4">
+                            <MicOff className="w-3.5 h-3.5 mr-1.5" />
+                            End
                         </Button>
-                    </div>
+                    </>
                 ) : status === 'connecting' ? (
-                    <Button variant="outline" disabled>
-                        <Mic className="w-4 h-4 mr-2 animate-pulse" />
+                    <Button variant="outline" size="sm" disabled className="rounded-full px-4">
+                        <Mic className="w-3.5 h-3.5 mr-1.5 animate-pulse" />
                         Connecting...
                     </Button>
                 ) : (
-                    <Button variant="default" onClick={handleStart}>
-                        <Layers className="w-4 h-4 mr-2" />
+                    <Button variant="default" size="sm" onClick={handleStart} className="rounded-full px-4">
+                        <Layers className="w-3.5 h-3.5 mr-1.5" />
                         Reconnect
                     </Button>
                 )}

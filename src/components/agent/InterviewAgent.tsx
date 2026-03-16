@@ -2,9 +2,7 @@
 
 import { useInterviewStore } from '@/lib/store';
 import { Button } from "@/components/ui/button";
-import { StatusIndicator } from './StatusIndicator';
-import { Visualizer } from './Visualizer';
-import { ThinkingIndicator } from './ThinkingIndicator';
+import { VoiceOrb } from './VoiceOrb';
 import { Mic, MicOff, GraduationCap } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { getAgentTools } from '@/lib/agent-tools';
@@ -321,62 +319,52 @@ export function InterviewAgent() {
     }, [code, status]);
 
     return (
-        <div id="agent-container" className="flex flex-col gap-4">
-            {/* Thinking Indicator */}
-            {(isThinking || isModelSpeaking) && (
-                <ThinkingIndicator isThinking={isThinking || isModelSpeaking} currentAction={currentAction} />
-            )}
+        <div id="agent-container" className="flex flex-col items-center gap-2">
+            {/* Voice Orb — central focal point */}
+            <VoiceOrb
+                status={status}
+                isSpeaking={isSpeaking}
+                isModelSpeaking={isModelSpeaking}
+                volume={volume}
+                isThinking={isThinking}
+                currentAction={currentAction}
+            />
 
             {/* Interruption feedback */}
             {wasInterrupted && (
-                <div className="text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded border border-yellow-500/30 flex items-center gap-2 animate-pulse">
+                <div className="text-xs text-yellow-500 bg-yellow-500/10 px-3 py-1.5 rounded-full border border-yellow-500/20 flex items-center gap-1.5 animate-pulse">
                     <MicOff className="w-3 h-3" />
                     Listening to you...
                 </div>
             )}
 
-            <div className="flex items-center gap-4 p-4 border rounded-xl bg-card">
-                <div className="flex flex-col items-center gap-2">
-                    <StatusIndicator status={status} isModelSpeaking={isModelSpeaking} />
-                    {status === 'connected' && !isModelSpeaking && isSpeaking && (
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-400">
-                            <Mic className="w-2.5 h-2.5 animate-pulse" />
-                            <span>Mic active</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex-1 w-full min-w-0">
-                    <Visualizer isSpeaking={isSpeaking || isModelSpeaking} volume={volume} />
-                </div>
-
+            {/* Control button */}
+            <div className="pt-1">
                 {status === 'connected' ? (
-                    <Button variant="destructive" size="icon" onClick={handleStop}>
-                        <MicOff className="w-4 h-4" />
+                    <Button variant="destructive" size="sm" onClick={handleStop} className="rounded-full px-4">
+                        <MicOff className="w-3.5 h-3.5 mr-1.5" />
+                        End
                     </Button>
                 ) : status === 'connecting' ? (
-                    <Button variant="outline" disabled>
-                        <Mic className="w-4 h-4 mr-2 animate-pulse" />
+                    <Button variant="outline" size="sm" disabled className="rounded-full px-4">
+                        <Mic className="w-3.5 h-3.5 mr-1.5 animate-pulse" />
                         Connecting...
                     </Button>
                 ) : workspaceStatus !== 'ready' ? (
-                    <Button variant="outline" disabled>
+                    <Button variant="outline" size="sm" disabled className="rounded-full px-4">
                         {interviewMode === 'practice' ? (
-                            <GraduationCap className="w-4 h-4 mr-2" />
+                            <GraduationCap className="w-3.5 h-3.5 mr-1.5" />
                         ) : (
-                            <Mic className="w-4 h-4 mr-2" />
+                            <Mic className="w-3.5 h-3.5 mr-1.5" />
                         )}
-                        Waiting for workspace...
+                        Setting up...
                     </Button>
                 ) : (
-                    <Button
-                        variant="default"
-                        onClick={handleStart}
-                    >
+                    <Button variant="default" size="sm" onClick={handleStart} className="rounded-full px-4">
                         {interviewMode === 'practice' ? (
-                            <GraduationCap className="w-4 h-4 mr-2" />
+                            <GraduationCap className="w-3.5 h-3.5 mr-1.5" />
                         ) : (
-                            <Mic className="w-4 h-4 mr-2" />
+                            <Mic className="w-3.5 h-3.5 mr-1.5" />
                         )}
                         Reconnect
                     </Button>
