@@ -115,7 +115,7 @@ jobs:
           (async () => {
             const key = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
             const genAI = new GoogleGenerativeAI(key);
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const model = genAI.getGenerativeModel({ model: 'gemini-3.1-pro-preview' });
             const result = await model.generateContent('Respond with just: OK');
             console.log('Gemini API response:', result.response.text().trim().substring(0, 20));
           })().catch(e => { console.error(e.message); process.exit(1); });

@@ -2,9 +2,7 @@
 
 import { useInterviewStore } from '@/lib/store';
 import { Button } from "@/components/ui/button";
-import { StatusIndicator } from './StatusIndicator';
-import { Visualizer } from './Visualizer';
-import { ThinkingIndicator } from './ThinkingIndicator';
+import { VoiceOrb } from './VoiceOrb';
 import { Mic, MicOff, GraduationCap } from 'lucide-react';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { getAgentTools } from '@/lib/agent-tools';
@@ -28,8 +26,6 @@ export function InterviewAgent() {
 
     // Tool handler - always gets fresh state to avoid closure issues
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
-        console.log("🛠️ Handling Tool Calls:", functionCalls.map((c: any) => c.name));
-
         // Get fresh tools - they read workspaceId from the store internally
         const toolFunctions = getAgentTools();
 
@@ -41,21 +37,18 @@ export function InterviewAgent() {
             const id = call.id; // Gemini function call ID
             const fn = (toolFunctions as any)[name];
 
-            console.log(`🔧 Executing tool: ${name}`, { id, args });
-
             if (fn) {
                 setIsThinking(true);
                 setCurrentAction(`Running ${name}...`);
                 try {
                     const result = await fn(args);
-                    console.log(`✅ Tool ${name} result:`, typeof result === 'string' ? result.substring(0, 200) : result);
                     responses.push({
                         id: id, // Include the function call ID
                         name: name,
                         response: { result: result }
                     });
                 } catch (err) {
-                    console.error(`❌ Tool ${name} error:`, err);
+                    console.error(`Tool ${name} error:`, err);
                     responses.push({
                         id: id,
                         name: name,
@@ -64,7 +57,6 @@ export function InterviewAgent() {
                 }
                 setIsThinking(false);
             } else {
-                console.warn(`⚠️ Tool ${name} not found in toolFunctions`);
                 responses.push({
                     id: id,
                     name: name,
@@ -96,18 +88,15 @@ export function InterviewAgent() {
                 apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
             }
 
-            console.log("🔑 Gemini API Key available:", !!apiKey, apiKey ? `(${apiKey.substring(0, 10)}...)` : '');
-
             if (!apiKey || cancelled) {
                 if (!apiKey) {
-                    console.error("❌ Gemini API Key missing! Set GEMINI_API_KEY in .env.local");
+                    console.error("Gemini API Key missing! Set GEMINI_API_KEY in .env.local");
                 }
                 return;
             }
 
             // Create client with current interview mode (real or practice)
             const mode: InterviewMode = interviewMode === 'practice' ? 'practice' : 'real';
-            console.log(`🎙️ Creating Gemini Live client in ${mode} mode`);
             const client = new InterviewLiveClient(apiKey.trim(), mode);
 
         client.onStatusChange = (s) => setStatus(s);
@@ -124,16 +113,13 @@ export function InterviewAgent() {
         client.onMessage = (msg) => {
             // Handle text transcript updates from model
             useInterviewStore.getState().addTranscriptMessage('agent', msg, 'audio');
-            console.log('📝 Agent message added to transcript:', msg.substring(0, 100));
         };
         client.onUserTranscript = (text) => {
             // Handle user speech transcription from Gemini
             useInterviewStore.getState().addTranscriptMessage('user', text, 'audio');
-            console.log('🎤 User transcript received:', text.substring(0, 100));
         };
         // New callbacks for natural conversation flow
         client.onInterrupted = () => {
-            console.log("🛑 User interrupted - stopping AI speech");
             setWasInterrupted(true);
             setIsModelSpeaking(false);
             setIsThinking(false);
@@ -142,7 +128,6 @@ export function InterviewAgent() {
             setTimeout(() => setWasInterrupted(false), 3000);
         };
         client.onTurnEnd = () => {
-            console.log("✅ Model turn complete");
             setIsModelSpeaking(false);
             setIsThinking(false);
         };
@@ -153,22 +138,15 @@ export function InterviewAgent() {
             }
         };
 
-        // Handle case where model doesn't respond (useful for debugging)
-        client.onNoResponse = () => {
-            console.warn("⚠️ Model didn't respond to user input");
-        };
-
         // Send initial code context when Gemini session is ready
         client.onSetupComplete = () => {
             const currentCode = useInterviewStore.getState().code;
             if (currentCode && currentCode.trim()) {
-                console.log("📝 Sending initial code context to Gemini");
                 client.sendCodeContext(currentCode, true);
             }
         };
 
         clientRef.current = client;
-        console.log(`🎙️ Gemini Live client initialized in ${mode} mode`);
 
         // Register disconnect callback for ending interview
         setAgentDisconnect(() => {
@@ -239,10 +217,7 @@ export function InterviewAgent() {
     }, [currentProblemId, interviewMode, selectedCompanyId]);
 
     const handleStart = useCallback(async () => {
-        console.log("🚀 handleStart called, clientRef.current:", !!clientRef.current);
-
         if (!clientRef.current) {
-            console.error("❌ Gemini client not initialized!");
             return;
         }
 
@@ -251,16 +226,11 @@ export function InterviewAgent() {
             const problemContext = getCurrentProblemContext();
             if (problemContext) {
                 clientRef.current.setProblemContext(problemContext);
-                console.log(`📋 Starting interview with problem: ${problemContext.title}`);
-            } else {
-                console.warn("⚠️ No problem selected - Gemini won't know what to interview about");
             }
 
-            console.log("🔌 Calling connect()...");
             await clientRef.current.connect();
-            console.log("✅ Connect called successfully");
         } catch (err) {
-            console.error("❌ Error in handleStart:", err);
+            console.error("Error in handleStart:", err);
         }
     }, [getCurrentProblemContext]);
 
@@ -273,7 +243,6 @@ export function InterviewAgent() {
     // Auto-start when workspace is ready
     useEffect(() => {
         if (workspaceStatus === 'ready' && status === 'disconnected' && clientRef.current) {
-            console.log("🚀 Auto-starting Gemini Live (workspace ready)");
             handleStart();
         }
     }, [workspaceStatus, status, handleStart]);
@@ -306,7 +275,6 @@ export function InterviewAgent() {
 
         codeUpdateTimeoutRef.current = setTimeout(() => {
             if (clientRef.current?.isConnected() && currentCode.trim()) {
-                console.log("📝 Sending code update to Gemini (user paused typing)");
                 clientRef.current.sendCodeContext(currentCode, true);
                 lastCodeUpdateRef.current = Date.now();
                 previousCodeRef.current = currentCode;
@@ -321,62 +289,52 @@ export function InterviewAgent() {
     }, [code, status]);
 
     return (
-        <div id="agent-container" className="flex flex-col gap-4">
-            {/* Thinking Indicator */}
-            {(isThinking || isModelSpeaking) && (
-                <ThinkingIndicator isThinking={isThinking || isModelSpeaking} currentAction={currentAction} />
-            )}
+        <div id="agent-container" className="flex flex-col items-center gap-2">
+            {/* Voice Orb — central focal point */}
+            <VoiceOrb
+                status={status}
+                isSpeaking={isSpeaking}
+                isModelSpeaking={isModelSpeaking}
+                volume={volume}
+                isThinking={isThinking}
+                currentAction={currentAction}
+            />
 
             {/* Interruption feedback */}
             {wasInterrupted && (
-                <div className="text-xs text-yellow-400 bg-yellow-900/20 p-2 rounded border border-yellow-500/30 flex items-center gap-2 animate-pulse">
+                <div className="text-xs text-yellow-500 bg-yellow-500/10 px-3 py-1.5 rounded-full border border-yellow-500/20 flex items-center gap-1.5 animate-pulse">
                     <MicOff className="w-3 h-3" />
                     Listening to you...
                 </div>
             )}
 
-            <div className="flex items-center gap-4 p-4 border rounded-xl bg-card">
-                <div className="flex flex-col items-center gap-2">
-                    <StatusIndicator status={status} isModelSpeaking={isModelSpeaking} />
-                    {status === 'connected' && !isModelSpeaking && isSpeaking && (
-                        <div className="flex items-center gap-1 text-[10px] text-emerald-400">
-                            <Mic className="w-2.5 h-2.5 animate-pulse" />
-                            <span>Mic active</span>
-                        </div>
-                    )}
-                </div>
-
-                <div className="flex-1 w-full min-w-0">
-                    <Visualizer isSpeaking={isSpeaking || isModelSpeaking} volume={volume} />
-                </div>
-
+            {/* Control button */}
+            <div className="pt-1">
                 {status === 'connected' ? (
-                    <Button variant="destructive" size="icon" onClick={handleStop}>
-                        <MicOff className="w-4 h-4" />
+                    <Button variant="destructive" size="sm" onClick={handleStop} className="rounded-full px-4">
+                        <MicOff className="w-3.5 h-3.5 mr-1.5" />
+                        End
                     </Button>
                 ) : status === 'connecting' ? (
-                    <Button variant="outline" disabled>
-                        <Mic className="w-4 h-4 mr-2 animate-pulse" />
+                    <Button variant="outline" size="sm" disabled className="rounded-full px-4">
+                        <Mic className="w-3.5 h-3.5 mr-1.5 animate-pulse" />
                         Connecting...
                     </Button>
                 ) : workspaceStatus !== 'ready' ? (
-                    <Button variant="outline" disabled>
+                    <Button variant="outline" size="sm" disabled className="rounded-full px-4">
                         {interviewMode === 'practice' ? (
-                            <GraduationCap className="w-4 h-4 mr-2" />
+                            <GraduationCap className="w-3.5 h-3.5 mr-1.5" />
                         ) : (
-                            <Mic className="w-4 h-4 mr-2" />
+                            <Mic className="w-3.5 h-3.5 mr-1.5" />
                         )}
-                        Waiting for workspace...
+                        Setting up...
                     </Button>
                 ) : (
-                    <Button
-                        variant="default"
-                        onClick={handleStart}
-                    >
+                    <Button variant="default" size="sm" onClick={handleStart} className="rounded-full px-4">
                         {interviewMode === 'practice' ? (
-                            <GraduationCap className="w-4 h-4 mr-2" />
+                            <GraduationCap className="w-3.5 h-3.5 mr-1.5" />
                         ) : (
-                            <Mic className="w-4 h-4 mr-2" />
+                            <Mic className="w-3.5 h-3.5 mr-1.5" />
                         )}
                         Reconnect
                     </Button>

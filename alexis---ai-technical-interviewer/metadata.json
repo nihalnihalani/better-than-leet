@@ -1,7 +1,0 @@
-{
-  "name": "Alexis - AI Technical Interviewer",
-  "description": "A live coding environment where an AI interviewer named Alexis conducts a technical assessment using the Gemini Live API.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}

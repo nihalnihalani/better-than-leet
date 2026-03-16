@@ -22,8 +22,8 @@ import { getSystemDesignTopic, type SystemDesignTopic } from "@/data/system-desi
 const INPUT_SAMPLE_RATE = 16000;  // Input MUST be 16kHz
 const OUTPUT_SAMPLE_RATE = 24000; // Output is always 24kHz
 
-// Use gemini-2.5-flash-native-audio for Live API
-const MODEL = "models/gemini-2.5-flash-native-audio-preview-12-2025";
+// Use Gemini 2.5 Flash Native Audio (latest) for Live API voice
+const MODEL = "models/gemini-2.5-flash-native-audio-latest";
 
 // WebSocket endpoint
 const WS_BASE_URL = "wss://generativelanguage.googleapis.com";

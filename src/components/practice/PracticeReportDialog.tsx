@@ -23,10 +23,12 @@ import {
   ArrowRight,
   RefreshCw,
   Star,
+  FileDown,
 } from "lucide-react";
 import { useInterviewStore } from "@/lib/store";
 import { useEffect, useState } from "react";
 import { COMPANIES } from "@/data/company-problems";
+import { generatePracticeReportPDF } from "@/lib/pdf-generator";
 import {
   CoachingFeedback,
   DEFAULT_COACHING_FEEDBACK,
@@ -430,9 +432,25 @@ export function PracticeReportDialog({ open, onOpenChange }: PracticeReportDialo
               Practice Another
             </Button>
           </Link>
-          <Button onClick={() => onOpenChange(false)}>
-            Done
-          </Button>
+          <div className="flex gap-2">
+            {feedback && (
+              <Button variant="outline" onClick={() => {
+                generatePracticeReportPDF(
+                  feedback,
+                  testResults,
+                  transcript.length,
+                  latestReview?.score,
+                  company?.name,
+                );
+              }}>
+                <FileDown className="w-4 h-4 mr-2" />
+                Download PDF
+              </Button>
+            )}
+            <Button onClick={() => onOpenChange(false)}>
+              Done
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

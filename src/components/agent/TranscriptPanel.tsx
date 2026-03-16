@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useInterviewStore } from '@/lib/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquare, Mic, Type } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 function formatRelativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -95,9 +96,37 @@ export function TranscriptPanel() {
                     {formatRelativeTime(group.firstTimestamp)}
                   </span>
                 </div>
-                <p className="leading-relaxed whitespace-pre-wrap">
-                  {group.messages.map((m) => m.text).join(' ')}
-                </p>
+                <div className="leading-relaxed transcript-markdown">
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <p className="my-1">{children}</p>,
+                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                      em: ({ children }) => <em className="italic">{children}</em>,
+                      h1: ({ children }) => <h3 className="font-bold text-sm mt-2 mb-1">{children}</h3>,
+                      h2: ({ children }) => <h3 className="font-bold text-sm mt-2 mb-1">{children}</h3>,
+                      h3: ({ children }) => <h3 className="font-semibold text-xs mt-1.5 mb-0.5">{children}</h3>,
+                      ul: ({ children }) => <ul className="list-disc pl-4 my-1 space-y-0.5">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal pl-4 my-1 space-y-0.5">{children}</ol>,
+                      li: ({ children }) => <li>{children}</li>,
+                      code: ({ className, children }) => {
+                        const isBlock = className?.includes('language-');
+                        return isBlock ? (
+                          <pre className="bg-black/10 dark:bg-white/10 p-2 rounded-md text-[11px] overflow-x-auto my-1.5">
+                            <code>{children}</code>
+                          </pre>
+                        ) : (
+                          <code className="bg-black/10 dark:bg-white/10 px-1 py-0.5 rounded text-[11px]">{children}</code>
+                        );
+                      },
+                      pre: ({ children }) => <>{children}</>,
+                      blockquote: ({ children }) => (
+                        <blockquote className="border-l-2 border-current/30 pl-2 my-1 opacity-80 italic">{children}</blockquote>
+                      ),
+                    }}
+                  >
+                    {group.messages.map((m) => m.text).join(' ')}
+                  </ReactMarkdown>
+                </div>
               </div>
             ))
           )}

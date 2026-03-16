@@ -10,11 +10,6 @@ export default function MermaidDiagramCanvas() {
   const [error, setError] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
 
-  // Debug logging
-  useEffect(() => {
-    console.log('🎨 MermaidDiagramCanvas - mermaidDiagram updated:', mermaidDiagram ? `${mermaidDiagram.substring(0, 50)}...` : 'empty');
-  }, [mermaidDiagram]);
-
   useEffect(() => {
     // Initialize Mermaid with configuration
     mermaid.initialize({
@@ -37,16 +32,12 @@ export default function MermaidDiagramCanvas() {
     }
 
     const renderDiagram = async () => {
-      console.log('🎨 Starting Mermaid render...');
       setIsRendering(true);
       setError(null);
 
       try {
         // Generate unique ID for this render
         const id = `mermaid-${Date.now()}`;
-
-        console.log('🎨 Rendering Mermaid diagram with ID:', id);
-        console.log('🎨 Diagram content:', mermaidDiagram.substring(0, 100));
 
         // Clear previous content
         if (containerRef.current) {
@@ -56,15 +47,11 @@ export default function MermaidDiagramCanvas() {
         // Render the diagram
         const { svg } = await mermaid.render(id, mermaidDiagram);
 
-        console.log('✅ Mermaid render successful, SVG length:', svg.length);
-
         if (containerRef.current) {
           containerRef.current.innerHTML = svg;
-          console.log('✅ SVG inserted into DOM');
         }
       } catch (err) {
-        console.error('❌ Mermaid rendering error:', err);
-        console.error('❌ Failed diagram:', mermaidDiagram);
+        console.error('Mermaid rendering error:', err);
         setError(err instanceof Error ? err.message : 'Failed to render diagram');
       } finally {
         setIsRendering(false);

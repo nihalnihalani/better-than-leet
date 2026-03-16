@@ -33,15 +33,15 @@ export function Controls({
     hasError
 }: ControlsProps) {
   return (
-    <div className="flex flex-col gap-2 p-4">
+    <div className="flex flex-col gap-2 p-3">
       <Button
         onClick={onRun}
         disabled={isRunning}
         aria-busy={isRunning}
         aria-label={isRunning ? "Running code" : "Run code"}
-        className="w-full bg-green-600 hover:bg-green-700 text-white"
+        className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors duration-150"
       >
-        <Play className="w-4 h-4 mr-2" fill="currentColor" aria-hidden="true" />
+        <Play className="w-3.5 h-3.5 mr-1.5" fill="currentColor" aria-hidden="true" />
         {isRunning ? "Running..." : "Run Code"}
       </Button>
 
@@ -51,21 +51,21 @@ export function Controls({
             disabled={isFixing}
             aria-busy={isFixing}
             aria-label={isFixing ? "Agent is fixing code" : "Auto fix code with agent"}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white animate-pulse"
+            className="w-full rounded-lg bg-white/10 hover:bg-white/15 text-purple-400 border border-purple-500/20 transition-colors duration-150"
         >
-            <Wand2 className="w-4 h-4 mr-2" aria-hidden="true" />
-            {isFixing ? "Agent Fixing..." : "Auto Fix with Agent"}
+            <Wand2 className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+            {isFixing ? "Agent Fixing..." : "Auto Fix"}
         </Button>
       )}
 
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button
-            variant="destructive"
-            className="w-full mt-4"
+            variant="ghost"
+            className="w-full mt-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors duration-150"
             aria-label="End interview and download report"
           >
-            <FileDown className="w-4 h-4 mr-2" aria-hidden="true" />
+            <FileDown className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
             End Interview
           </Button>
         </AlertDialogTrigger>

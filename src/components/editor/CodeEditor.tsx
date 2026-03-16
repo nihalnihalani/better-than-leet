@@ -1,12 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import type { editor } from 'monaco-editor';
 import type { Monaco } from '@monaco-editor/react';
 import { Button } from "@/components/ui/button";
 import { Play } from "lucide-react";
 import { useInterviewStore } from '@/lib/store';
+
+function useTheme() {
+  const [dark, setDark] = useState(true);
+  useEffect(() => {
+    const el = document.documentElement;
+    setDark(el.classList.contains('dark'));
+    const obs = new MutationObserver(() => setDark(el.classList.contains('dark')));
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return dark;
+}
 
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -32,6 +44,8 @@ export function CodeEditor({
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const onRunRef = useRef(onRun);
   const { addBlurEvent, addPasteEvent, interviewMode } = useInterviewStore();
+  const isDark = useTheme();
+  const monacoTheme = isDark ? 'vs-dark' : 'light';
 
   // Keep onRun ref current to avoid stale closure in Monaco action
   useEffect(() => {
@@ -45,7 +59,6 @@ export function CodeEditor({
     const handleVisibilityChange = () => {
       if (document.hidden) {
         addBlurEvent();
-        console.log("⚠️ Tab focus lost - Integrity Check");
       }
     };
 
@@ -87,7 +100,6 @@ export function CodeEditor({
         const currentMode = useInterviewStore.getState().interviewMode;
         if (actualLength >= PASTE_CHAR_THRESHOLD && currentMode !== 'system-design') {
           addPasteEvent(actualLength);
-          console.log(`⚠️ Paste detected - ${actualLength} characters`);
         }
       }
     });
@@ -103,19 +115,19 @@ export function CodeEditor({
   };
 
   return (
-    <div className="flex flex-col h-full border rounded-md overflow-hidden bg-card">
-      <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
-        <span className="text-sm text-muted-foreground font-mono">{language}</span>
+    <div className="flex flex-col h-full overflow-hidden bg-card">
+      <div className="flex items-center justify-between h-9 px-3 border-b border-border shrink-0 bg-muted/50">
+        <span className="text-xs text-muted-foreground font-mono">{language}</span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter to run
+          <span className="text-[11px] text-muted-foreground/50 hidden sm:inline">
+            {typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '\u2318' : 'Ctrl'}+Enter
           </span>
           <Button
             size="sm"
-            variant="secondary"
+            variant="ghost"
             onClick={handleRun}
             disabled={isRunning}
-            className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white border-0"
+            className="h-6 text-xs gap-1 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white transition-colors duration-150"
           >
             <Play className="w-3 h-3" fill="currentColor" />
             {isRunning ? "Running..." : "Run"}
@@ -127,7 +139,7 @@ export function CodeEditor({
           height="100%"
           language={language}
           value={initialCode}
-          theme="vs-dark"
+          theme={monacoTheme}
           onChange={handleEditorChange}
           onMount={handleEditorMount}
           options={{
