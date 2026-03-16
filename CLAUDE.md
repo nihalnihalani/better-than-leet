@@ -6,11 +6,11 @@
 
 1. Stage the changed files: `git add <specific files you changed>`
 2. Commit with a clear message describing what changed: `git commit -m "description of change"`
-3. Push to `main`: `git push origin main`
+3. Push to the current working branch: `git push origin <branch>`
 
 This applies to EVERY change — no exceptions. Do not batch changes. Commit and push immediately after each logical change.
 
-- Always push to `main`
+- Push to the current branch (use feature branches + PRs for non-trivial work)
 - Never force push
 - Use descriptive commit messages that explain the "why"
 - If a pre-commit hook fails, fix the issue and create a NEW commit (never amend)

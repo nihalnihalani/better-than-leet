@@ -87,7 +87,9 @@ export default function InterviewPage() {
 
   // Initialize auth session for all modes
   useEffect(() => {
-    initSession().then(() => setSessionReady(true));
+    initSession().then((token) => {
+      if (token) setSessionReady(true);
+    });
   }, []);
 
   // Integrity tracking (real AND practice modes - not system-design)

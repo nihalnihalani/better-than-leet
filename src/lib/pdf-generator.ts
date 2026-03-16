@@ -423,7 +423,7 @@ export function generatePracticeReportPDF(feedback: {
   const sw = (cw - 6) / 3;
   const sts = [
     { l: 'Tests Passed', v: testResults.length > 0 ? `${testResults[testResults.length - 1].testsPassed}/${testResults[testResults.length - 1].testsTotal}` : '0/0' },
-    { l: 'Code Quality', v: codeQualityScore ? `${codeQualityScore}/10` : 'N/A' },
+    { l: 'Code Quality', v: codeQualityScore != null ? `${codeQualityScore}/10` : 'N/A' },
     { l: 'Exchanges', v: `${transcriptLength}` },
   ];
   sts.forEach((s, i) => {

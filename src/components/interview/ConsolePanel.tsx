@@ -42,7 +42,7 @@ export function ConsolePanel({ output }: ConsolePanelProps) {
         <Terminal className="w-3 h-3 text-muted-foreground" />
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Console</span>
       </div>
-      <pre className="flex-1 p-3 overflow-auto font-mono">
+      <div className="flex-1 p-3 overflow-auto font-mono">
         {output.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground/50">
             <Terminal className="w-8 h-8 mb-2 opacity-20" />
@@ -55,13 +55,13 @@ export function ConsolePanel({ output }: ConsolePanelProps) {
                   <span className="mt-0.5 shrink-0 select-none opacity-60" aria-hidden="true">
                       <LogIcon type={log.type} />
                   </span>
-                  <span className="whitespace-pre-wrap">{log.content}</span>
+                  <span className="whitespace-pre-wrap break-words">{log.content}</span>
               </div>
             ))}
           </div>
         )}
         <div ref={endRef} />
-      </pre>
+      </div>
     </div>
   );
 }
