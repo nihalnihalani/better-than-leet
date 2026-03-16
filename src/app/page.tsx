@@ -49,7 +49,7 @@ export default function Home() {
 
           <p className="text-xl text-muted-foreground dark:text-foreground/60 max-w-2xl animate-slide-up-fade leading-relaxed" style={{ animationDelay: '400ms' }}>
             LeetCode can't ask follow-up questions. Alexis can. Experience voice-first technical interviews
-            powered by Gemini 3 Pro with real-time coding and instant feedback.
+            powered by Gemini 3.1 Pro with real-time coding and instant feedback.
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 animate-slide-up-fade" style={{ animationDelay: '600ms' }}>
@@ -105,7 +105,7 @@ export default function Home() {
               <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                 <Sparkles className="w-6 h-6 text-purple-500 dark:text-purple-400" />
               </div>
-              <CardTitle className="text-xl">Gemini 3 Pro Analysis</CardTitle>
+              <CardTitle className="text-xl">Gemini 3.1 Pro Analysis</CardTitle>
               <CardDescription className="text-base">
                 Receive comprehensive feedback on code quality, complexity, and security instantly.
               </CardDescription>
