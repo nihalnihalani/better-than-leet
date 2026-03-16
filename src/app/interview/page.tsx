@@ -65,6 +65,7 @@ export default function InterviewPage() {
   } = useInterviewStore();
 
   const [mounted, setMounted] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isFixing, setIsFixing] = useState(false);
@@ -82,6 +83,11 @@ export default function InterviewPage() {
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), 0);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Initialize auth session for all modes
+  useEffect(() => {
+    initSession().then(() => setSessionReady(true));
   }, []);
 
   // Integrity tracking (real AND practice modes - not system-design)
@@ -190,11 +196,11 @@ export default function InterviewPage() {
   };
 
   useEffect(() => {
-    // Skip for system design mode
-    if (isSystemDesign) return;
-    
-    // Initialize session token first, then workspace
-    initSession().then(() => initWorkspace());
+    // Skip for system design mode, and wait for session auth
+    if (isSystemDesign || !sessionReady) return;
+
+    // Initialize workspace (session already initialized above)
+    initWorkspace();
 
     // Cleanup on page unload (browser close, tab close, navigation away)
     const handleBeforeUnload = () => {
@@ -218,7 +224,7 @@ export default function InterviewPage() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSystemDesign]); // Run once
+  }, [isSystemDesign, sessionReady]); // Run once session is ready
 
   const handleRun = async (codeToRun: string) => {
     if (!workspaceId) {
@@ -411,7 +417,7 @@ export default function InterviewPage() {
 
   // SYSTEM DESIGN MODE - Render dedicated layout
   if (isSystemDesign) {
-    return <SystemDesignInterviewLayout />;
+    return <SystemDesignInterviewLayout sessionReady={sessionReady} />;
   }
 
   // CODING INTERVIEW MODE - Render standard layout
@@ -493,7 +499,7 @@ export default function InterviewPage() {
           <ResizablePanel defaultSize={35} minSize={20} className="bg-card border-l">
             <div className="flex flex-col h-full overflow-hidden">
               <div className="p-4 border-b shrink-0">
-                <InterviewAgent />
+                {sessionReady ? <InterviewAgent /> : <div className="text-muted-foreground text-sm">Initializing session...</div>}
               </div>
 
               <div className="flex-1 min-h-0 overflow-hidden border-b">
@@ -530,7 +536,7 @@ export default function InterviewPage() {
  * Completely separate from the coding interview layout above
  * Uses its own store (system-design-store) and agent (SystemDesignAgent)
  */
-function SystemDesignInterviewLayout() {
+function SystemDesignInterviewLayout({ sessionReady }: { sessionReady: boolean }) {
   const selectedTopicId = useSystemDesignStore((s) => s.selectedTopicId);
   const setOnEndInterview = useSystemDesignStore((s) => s.setOnEndInterview);
   const agentDisconnect = useSystemDesignStore((s) => s.agentDisconnect);
@@ -556,12 +562,12 @@ function SystemDesignInterviewLayout() {
     }
   }, [selectedTopicId]);
 
-  // Initialize session
+  // Start system design session (auth session initialized by parent)
   useEffect(() => {
-    initSession().then(() => {
+    if (sessionReady) {
       useSystemDesignStore.getState().startSession();
-    });
-  }, []);
+    }
+  }, [sessionReady]);
 
   const handleEndInterview = async () => {
     // Disconnect agent
@@ -628,7 +634,7 @@ function SystemDesignInterviewLayout() {
           <ResizablePanel defaultSize={30} minSize={20} className="bg-card border-l">
             <div className="flex flex-col h-full overflow-hidden">
               <div className="p-4 border-b shrink-0">
-                <SystemDesignAgent />
+                {sessionReady ? <SystemDesignAgent /> : <div className="text-muted-foreground text-sm">Initializing session...</div>}
               </div>
 
               <div className="flex-1 min-h-0 overflow-hidden border-b">
