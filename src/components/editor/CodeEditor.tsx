@@ -59,7 +59,6 @@ export function CodeEditor({
     const handleVisibilityChange = () => {
       if (document.hidden) {
         addBlurEvent();
-        console.log("⚠️ Tab focus lost - Integrity Check");
       }
     };
 
@@ -101,7 +100,6 @@ export function CodeEditor({
         const currentMode = useInterviewStore.getState().interviewMode;
         if (actualLength >= PASTE_CHAR_THRESHOLD && currentMode !== 'system-design') {
           addPasteEvent(actualLength);
-          console.log(`⚠️ Paste detected - ${actualLength} characters`);
         }
       }
     });

@@ -96,7 +96,6 @@ export default function InterviewPage() {
 
     const handleBlur = () => {
       useInterviewStore.getState().addBlurEvent();
-      console.log('⚠️ User switched tabs during interview');
     };
 
     window.addEventListener('blur', handleBlur);
@@ -182,14 +181,12 @@ export default function InterviewPage() {
   // Cleanup workspace on page unload/navigation
   const cleanupWorkspace = async (wsId: string) => {
     try {
-      console.log('🗑️ Cleaning up workspace on page leave:', wsId);
       await fetch('/api/sandbox/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId: wsId }),
         keepalive: true, // Ensures request completes even if page unloads
       });
-      console.log('✅ Workspace cleanup complete');
     } catch (err) {
       console.warn('Failed to cleanup workspace:', err);
     }
@@ -373,13 +370,11 @@ export default function InterviewPage() {
     const wsId = useInterviewStore.getState().workspaceId;
     if (wsId) {
       try {
-        console.log('🗑️ Deleting workspace on end interview:', wsId);
         await authFetch('/api/sandbox/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ workspaceId: wsId }),
         });
-        console.log('✅ Workspace deleted');
         setWorkspaceId(null);
         setWorkspaceStatus('idle');
       } catch (err) {

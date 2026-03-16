@@ -95,13 +95,11 @@ export function InterviewReportDialog({ open, onOpenChange }: InterviewReportDia
       const workspaceId = useInterviewStore.getState().workspaceId;
       if (workspaceId) {
         try {
-          console.log('🗑️ Cleaning up workspace after report generation...');
           await fetch('/api/sandbox/delete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ workspaceId })
           });
-          console.log('✅ Workspace cleanup complete');
         } catch (deleteErr) {
           // Don't fail the report if cleanup fails - just log it
           console.warn('Failed to cleanup workspace (non-fatal):', deleteErr);

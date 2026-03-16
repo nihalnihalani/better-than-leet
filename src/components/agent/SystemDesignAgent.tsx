@@ -42,8 +42,6 @@ export function SystemDesignAgent() {
 
     // Tool handler - always gets fresh state to avoid closure issues
     const handleToolsCall = useCallback(async (functionCalls: any[]) => {
-        console.log("🛠️ Handling Tool Calls:", functionCalls.map((c: any) => c.name));
-
         // If end_interview is being called, mark the client as ending
         if (functionCalls.some((c: any) => c.name === 'end_interview') && clientRef.current) {
             clientRef.current.markInterviewEnding();
@@ -63,28 +61,16 @@ export function SystemDesignAgent() {
                 const id = call.id;
                 const fn = (toolFunctions as any)[name];
 
-                console.log(`🔧 Executing tool: ${name}`, { id, args });
-
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemDesignAgent.tsx:tool-dispatch',message:'Tool dispatch',data:{name,hasHandler:!!fn,argKeys:Object.keys(args||{}),args:JSON.stringify(args).substring(0,500)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-                // #endregion
                 if (fn) {
                     try {
                         const result = await fn(args);
-                        // #region agent log
-                        fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemDesignAgent.tsx:tool-result',message:'Tool result',data:{name,resultPreview:typeof result==='string'?result.substring(0,500):JSON.stringify(result).substring(0,500)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-                        // #endregion
-                        console.log(`✅ Tool ${name} result:`, typeof result === 'string' ? result.substring(0, 200) : result);
                         return {
                             id: id,
                             name: name,
                             response: { result: result }
                         };
                     } catch (err) {
-                        // #region agent log
-                        fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemDesignAgent.tsx:tool-error',message:'Tool threw error',data:{name,error:String(err)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-                        // #endregion
-                        console.error(`❌ Tool ${name} error:`, err);
+                        console.error(`Tool ${name} error:`, err);
                         return {
                             id: id,
                             name: name,
@@ -92,10 +78,6 @@ export function SystemDesignAgent() {
                         };
                     }
                 } else {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemDesignAgent.tsx:tool-not-found',message:'Tool NOT FOUND',data:{name,availableTools:Object.keys(toolFunctions)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-                    // #endregion
-                    console.warn(`⚠️ Tool ${name} not found in toolFunctions`);
                     return {
                         id: id,
                         name: name,
@@ -130,17 +112,14 @@ export function SystemDesignAgent() {
                 apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
             }
 
-            console.log("🔑 Gemini API Key available:", !!apiKey, apiKey ? `(${apiKey.substring(0, 10)}...)` : '');
-
             if (!apiKey || cancelled) {
                 if (!apiKey) {
-                    console.error("❌ Gemini API Key missing! Set GEMINI_API_KEY in .env.local");
+                    console.error("Gemini API Key missing! Set GEMINI_API_KEY in .env.local");
                 }
                 return;
             }
 
             // Create client for system design
-            console.log(`📐 Creating Gemini Live client in system-design mode`);
             const client = new GeminiLiveClient(apiKey.trim(), 'system-design');
 
             // Set system design topic
@@ -165,34 +144,22 @@ export function SystemDesignAgent() {
                 const store = useSystemDesignStore.getState();
                 store.addTranscriptMessage('agent', msg, 'audio');
 
-                console.log('📝 Agent message received (full):', msg);
-                console.log('📝 Message length:', msg.length, 'characters');
-                console.log('📝 Contains backticks?', msg.includes('```'));
-                console.log('📝 Contains "mermaid"?', msg.toLowerCase().includes('mermaid'));
-
                 // Extract and validate Mermaid diagram blocks
                 const mermaidBlocks = extractMermaidBlocks(msg);
-                console.log(`🔍 Extracted ${mermaidBlocks.length} Mermaid block(s) from agent message`);
 
                 if (mermaidBlocks.length > 0) {
                     // Use the last block if multiple are present
                     const latestDiagram = mermaidBlocks[mermaidBlocks.length - 1];
-                    console.log('📊 Mermaid diagram extracted:', latestDiagram.substring(0, 100) + '...');
                     const validation = validateMermaidSyntax(latestDiagram);
 
                     if (validation.valid) {
-                        console.log('✅ Valid Mermaid diagram extracted, updating store');
                         store.setMermaidDiagram(latestDiagram);
                         // Add success feedback to transcript
                         store.addTranscriptMessage('agent', '[System: Diagram successfully updated]', 'text');
                     } else {
-                        console.error('❌ Invalid Mermaid syntax:', validation.error);
-                        console.error('❌ Invalid diagram content:', latestDiagram);
                         // Add error feedback to transcript so agent can see it
                         store.addTranscriptMessage('agent', `[System: Diagram update failed - ${validation.error}]`, 'text');
                     }
-                } else {
-                    console.warn('⚠️ No Mermaid blocks found in agent message');
                 }
             };
             client.onUserTranscript = (text) => {
@@ -200,7 +167,6 @@ export function SystemDesignAgent() {
                 useSystemDesignStore.getState().addTranscriptMessage('user', text, 'audio');
             };
             client.onInterrupted = () => {
-                console.log("🛑 User interrupted - stopping AI speech");
                 setWasInterrupted(true);
                 setIsModelSpeaking(false);
                 setIsThinking(false);
@@ -208,7 +174,6 @@ export function SystemDesignAgent() {
                 setTimeout(() => setWasInterrupted(false), 3000);
             };
             client.onTurnEnd = () => {
-                console.log("✅ Model turn complete");
                 setIsModelSpeaking(false);
                 setIsThinking(false);
             };
@@ -219,16 +184,8 @@ export function SystemDesignAgent() {
                 }
             };
 
-            client.onNoResponse = () => {
-                console.warn("⚠️ Model didn't respond to user input");
-            };
-
             // After setup, send a text nudge to get the model to start using tools
             client.onSetupComplete = () => {
-                console.log("📐 System design session ready - sending tool nudge");
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/09eab501-0e28-4c32-9b57-199a2e4fe649',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SystemDesignAgent.tsx:onSetupComplete',message:'Setup complete, sending nudge',data:{topicId:selectedTopicId},timestamp:Date.now(),hypothesisId:'NUDGE'})}).catch(()=>{});
-                // #endregion
                 // Give a brief delay for audio pipeline to initialize, then nudge
                 setTimeout(() => {
                     if (client.isConnected()) {
@@ -255,7 +212,6 @@ OUTPUT THIS NOW. Not a description of it - the actual greeting and diagram.`);
 
             clientRef.current = client;
             setClientReady(true);
-            console.log(`📐 System Design Live client initialized`);
 
             // Register disconnect callback
             setAgentDisconnect(() => {
@@ -320,30 +276,15 @@ Continue the interview naturally from this point.`;
     }, []);
 
     const handleStart = useCallback(async () => {
-        console.log("🚀 handleStart called, clientRef.current:", !!clientRef.current);
-
         if (!clientRef.current) {
-            console.error("❌ System Design client not initialized!");
             return;
         }
 
         try {
-            console.log(`📐 Starting system design interview for topic: ${selectedTopicId}`);
-
-            // If this is a reconnection, we could inject context recovery
-            // (Note: setReconnectionContext not available in base GeminiLiveClient)
-            if (hasConnectedOnceRef.current) {
-                console.log("🔄 This is a reconnection - context would be injected here");
-            } else {
-                console.log("🆕 This is the first connection");
-            }
-
-            console.log("🔌 Calling connect()...");
             await clientRef.current.connect();
             hasConnectedOnceRef.current = true;
-            console.log("✅ Connect called successfully");
         } catch (err) {
-            console.error("❌ Error in handleStart:", err);
+            console.error("Error in handleStart:", err);
         }
     }, [selectedTopicId, buildContextRecovery]);
 
@@ -361,14 +302,12 @@ Continue the interview naturally from this point.`;
     }, []);
 
     const handleLoadDemo = useCallback(() => {
-        console.log('📊 Loading demo diagram');
         setMermaidDiagram(DEMO_DIAGRAM);
     }, [setMermaidDiagram]);
 
     // Auto-start ONCE when client is ready (not on reconnect loops)
     useEffect(() => {
         if (status === 'disconnected' && clientReady && clientRef.current && !hasConnectedOnceRef.current) {
-            console.log("🚀 Auto-starting System Design Live (client ready, first connect)");
             handleStart();
         }
     }, [status, clientReady, handleStart]);
